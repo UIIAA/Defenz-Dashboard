@@ -1,0 +1,192 @@
+# Template de Agente para Antigravity/Google
+# Copie e preencha os campos marcados com ${...}
+
+apiVersion: antigravity.google/v1
+kind: Agent
+metadata:
+  name: ${AGENT_NAME}
+  namespace: default
+  labels:
+    environment: production
+    team: ${TEAM_NAME}
+
+spec:
+  # Configuração do modelo
+  runtime:
+    model: claude-sonnet-4-20250514
+    temperature: 0.3
+    maxTokens: 4096
+    
+  # Definição do agente
+  agent:
+    name: ${AGENT_NAME}
+    version: "1.0"
+    description: |
+      ${AGENT_DESCRIPTION}
+      
+      Triggers:
+      - ${TRIGGER_1}
+      - ${TRIGGER_2}
+      
+  # Persona (será usado como system prompt base)
+  persona: |
+    ${AGENT_PERSONA}
+    
+  # Skills disponíveis
+  skills:
+    registry:
+      type: local
+      path: ./skills/
+      
+    autoDiscover: true
+    validation: strict
+    
+    # Skills explicitamente habilitadas
+    enabled:
+      - name: skill-creator
+        purpose: "Criar novas skills sob demanda"
+        autoInvoke: false
+        
+      # Adicione outras skills conforme necessário
+      # - name: pdf
+      #   purpose: "Manipular PDFs"
+      #   autoInvoke: true
+      
+  # Triggers de ativação
+  triggers:
+    # Por intent/pattern
+    - type: intent
+      patterns:
+        - "${INTENT_PATTERN_1}"
+        - "${INTENT_PATTERN_2}"
+      confidence: 0.7
+      
+    # Por webhook (opcional)
+    - type: webhook
+      endpoint: /api/agents/${AGENT_NAME}/trigger
+      methods: [POST]
+      auth: bearer
+      
+    # Por schedule (opcional)
+    - type: schedule
+      cron: "${CRON_EXPRESSION}"  # ex: "0 9 * * 1-5" (9am dias úteis)
+      timezone: America/Sao_Paulo
+      
+  # Workflows definidos
+  workflows:
+    - name: main-workflow
+      description: "Workflow principal"
+      
+      steps:
+        - id: intake
+          action: validate_input
+          onSuccess: process
+          onFailure: error_handler
+          
+        - id: process
+          action: execute_main_logic
+          skill: ${MAIN_SKILL}
+          onSuccess: output
+          onFailure: error_handler
+          
+        - id: output
+          action: generate_output
+          isTerminal: true
+          
+        - id: error_handler
+          action: handle_error
+          isTerminal: true
+          
+  # Configuração de execução
+  execution:
+    maxSteps: 50
+    timeoutSeconds: 300
+    
+    retryPolicy:
+      maxRetries: 3
+      backoffType: exponential
+      initialDelayMs: 1000
+      maxDelayMs: 30000
+      
+    circuitBreaker:
+      enabled: true
+      failureThreshold: 5
+      resetTimeoutSeconds: 60
+      
+  # Contexto e memória
+  context:
+    maxTokens: 128000
+    persistAcrossSessions: true
+    memoryType: conversation
+    
+    # Dados compartilhados
+    sharedData:
+      userPreferences: {}
+      sessionMetadata: {}
+      
+  # Autonomia
+  autonomy:
+    level: medium  # low | medium | high
+    
+    # Ações que requerem aprovação
+    requireApproval:
+      - delete
+      - send
+      - publish
+      - payment
+      - modify_permissions
+      
+    # Ações auto-executadas
+    autoExecute:
+      - read
+      - analyze
+      - summarize
+      - create_draft
+      
+  # Integrações
+  integrations:
+    # Google Workspace
+    googleWorkspace:
+      enabled: true
+      scopes:
+        - drive.readonly
+        - docs.readonly
+        - sheets.readonly
+        
+    # Webhooks de saída
+    webhooks:
+      onComplete:
+        url: ${WEBHOOK_URL}
+        method: POST
+        
+  # Monitoramento
+  monitoring:
+    logging:
+      level: info
+      destination: cloud-logging
+      
+    metrics:
+      enabled: true
+      customMetrics:
+        - name: task_success_rate
+        - name: avg_execution_time
+        - name: skill_invocation_count
+        
+    alerts:
+      - name: high_error_rate
+        condition: error_rate > 0.1
+        channel: ${ALERT_CHANNEL}
+        
+  # Segurança
+  security:
+    authentication:
+      type: oauth2
+      provider: google
+      
+    authorization:
+      type: rbac
+      defaultRole: viewer
+      
+    dataHandling:
+      piiDetection: true
+      encryptAtRest: true

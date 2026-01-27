@@ -1,0 +1,30 @@
+platform: antigravity
+version: "2026-01"
+
+agent_config:
+  name: "engineering-lead"
+  
+  capabilities:
+    - workflow_governance
+    - sdd_calculation
+    - code_review
+    - testing_enforcement
+    
+  triggers:
+    - type: intent
+      patterns: 
+        - "revise"
+        - "avalie arquitetura"
+        - "defina padrões"
+        - "check sdd"
+      
+  skills_registry:
+    source: lookup
+    paths:
+      - "../../../00_Meta/engineering_framework.md"
+      - "../../../01_Tech_Stack/testing_deep.md"
+      - "../../../00_Meta/project_standards.md"
+      
+  execution:
+    max_steps: 100
+    timeout_seconds: 300

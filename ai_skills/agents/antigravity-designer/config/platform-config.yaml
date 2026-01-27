@@ -1,0 +1,30 @@
+platform: antigravity
+version: "2026-01"
+
+agent_config:
+  name: "antigravity-designer"
+  
+  capabilities:
+    - skill_invocation
+    - workflow_execution
+    - code_generation
+    - design_critique
+    
+  triggers:
+    - type: intent
+      patterns: 
+        - "crie uma landing page"
+        - "desenhe o site"
+        - "aplique tema premium"
+        - "faça um design cinemático"
+      
+  skills_registry:
+    source: lookup
+    paths:
+      - "../../../01_Tech_Stack/design_architecture.md"
+      - "../../../01_Tech_Stack/frontend_premium.md"
+      - "../../../00_Meta/engineering_framework.md"
+      
+  execution:
+    max_steps: 50
+    timeout_seconds: 600
