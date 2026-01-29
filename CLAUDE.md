@@ -254,6 +254,54 @@ npx tsx scripts/seed-patients.ts
 }
 ```
 
+## AI Skills System (v2.0)
+
+The `ai_skills/` directory contains a portable agent orchestration framework. It is split into two layers:
+
+### Structure
+
+```
+ai_skills/
+├── REGISTRY.md              # Single source of truth (read first)
+├── core/                    # PORTABLE - copy to any project
+│   ├── meta/                # Protocols (master_protocol, engineering_framework, skill_creator)
+│   ├── agents/              # Agent definitions (explorer, planner, builder, designer, reviewer, documenter)
+│   └── skills/              # Generic skills (testing_deep)
+└── project/                 # PROJECT-SPECIFIC (Grafono)
+    ├── standards.md         # Architecture & coding conventions
+    ├── tech_stack/          # backend_deep, frontend_premium, design_architecture
+    └── domain/              # financial_logic, regras_clinicas, fluxos_n8n
+```
+
+### Model Protocol
+
+| Tier | Model | Usage |
+|------|-------|-------|
+| **Opus** | claude-opus-4-5 | Main chat only (architecture, decisions) |
+| **Sonnet** | claude-sonnet-4-5 | All Task-based execution agents |
+| **Haiku** | claude-haiku-4 | Documenter agent, simple queries |
+
+### Agent Catalog
+
+| Agent | Task subagent_type | Model | Purpose |
+|-------|--------------------|-------|---------|
+| `explorer` | `Explore` | Sonnet | Navigate and understand codebases |
+| `planner` | `Plan` | Sonnet | Design implementation strategies |
+| `builder` | `general-purpose` | Sonnet | Write and modify code |
+| `designer` | `Super-designer` | Sonnet | Premium visual design |
+| `reviewer` | `general-purpose` | Sonnet | Code review, QA governance |
+| `documenter` | `general-purpose` | Haiku | Documentation and reports |
+
+### Usage Pattern
+
+1. Read `ai_skills/REGISTRY.md` to identify the right agent
+2. Load `core/agents/{id}/AGENT.md` + its listed skills
+3. Invoke via `Task(subagent_type, model, prompt)` with context embedded
+
+### Portability
+
+To reuse in another project: copy `core/` and `REGISTRY.md`, then create a new `project/` with project-specific skills.
+
 ## File Locations Reference
 
 **Authentication**: `src/lib/auth.ts`, `src/middleware.ts`
@@ -262,4 +310,5 @@ npx tsx scripts/seed-patients.ts
 **UI components**: `src/components/ui/*.tsx`
 **Prisma schema**: `prisma/schema.prisma`
 **Seed scripts**: `scripts/*.ts`
+**AI Skills**: `ai_skills/REGISTRY.md` (start here)
 **Environment variables**: `.env` (production DATABASE_URL), `.env.local` (pulled from Vercel)
