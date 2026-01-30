@@ -1,9 +1,12 @@
 import Dashboard from "@/components/Dashboard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function Home() {
   return (
     <main className="min-h-screen">
-      <Dashboard />
+      <ErrorBoundary>
+        <Dashboard />
+      </ErrorBoundary>
     </main>
   );
 }
