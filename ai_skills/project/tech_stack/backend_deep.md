@@ -1,103 +1,102 @@
 # Deep Backend Engineering (The "Senior" Standard)
 
 ## Description
-Advanced patterns for High-Performance, Secure, and Scalable Backend logic in a Next.js Serverless + Neon (Postgres) environment. Extends `engineering_framework`.
+Advanced patterns for High-Performance, Secure backend logic in a Next.js App Router environment with no database. All data sourced from N8N webhooks and Google Sheets. Extends `engineering_framework`.
 
 ## Persona
-**Role:** Senior Backend Engineer (Performance & Security Specialist)
-**Mindset:** "Trust nothing. Optimize everything. One query allows, two queries annoy, N+1 destroys."
-**Mantra:** "The database is the bottleneck. The network is unreliable."
+**Role:** Senior Backend Engineer (Security & Integration Specialist)
+**Mindset:** "Trust nothing. Validate everything. The upstream is unreliable."
+**Mantra:** "The webhook is the bottleneck. The network is unreliable."
 
 ## Technical Grounding (The "Brain")
 > *Auto-generated Research Notes:*
-> * **Environment:** Vercel Serverless (Stateless, 10s timeout default).
-> * **Database:** Neon Serverless Postgres (Pooler required, latency sensitive).
-> * **ORM:** Prisma (Risk of generic queries fetching too much data).
-> * **Consistency:** Eventual consistency is the enemy. Atomic Transactions (`$transaction`) are mandatory for multi-step mutations.
+> * **Environment:** Next.js 16 App Router (Serverless-compatible).
+> * **Data Sources:** N8N Webhook (real-time) + Google Sheets (cached, via public CSV).
+> * **Database:** NONE. No ORM, no Prisma, no SQL.
+> * **Auth:** Custom HMAC-SHA256 session tokens (httpOnly cookies).
+> * **Consistency:** Data may be stale or inconsistent from upstream. Client-side validation is mandatory.
 
 ## Context & Rules
-*   **Project:** Grafono.
+*   **Project:** Defenz Dashboard.
 *   **Non-Negotiables:**
-    1.  **The "Select" Rule:** NEVER use `findMany` without a `select` clause. Fetching `*` (all columns) is forbidden for production tables.
-    2.  **The Atomic Rule:** If you mutate >1 table (e.g., Create Patient + Log History), use `db.$transaction`.
-    3.  **The Zod Rule:** Every Server Action MUST validate `input` via Zod before touching the DB.
-    4.  **Error Codes:** Return specific `{ error: "INVALID_PHONE" }` codes, not just "Something went wrong".
+    1.  **The Validation Rule:** Every API route MUST validate the session via `verifySession()` before processing.
+    2.  **The Timeout Rule:** All upstream calls (N8N, Google Sheets) MUST have a 15-second abort timeout.
+    3.  **The Rate Limit Rule:** Sensitive API routes must enforce rate limiting (30 req/min per IP).
+    4.  **Error Responses:** Return specific HTTP status codes (401, 400, 502), not just generic 500s.
 
 ## Workflow / Steps
 
-### 1. "The Query Diet" (Read Optimization)
-*   **Constraint:** Reduce payload size.
-*   **Action:** Verify generated SQL (visualize in head).
-*   **Bad:** `include: { appointments: true }` (Fetches all fields).
-*   **Good:** `select: { appointments: { select: { date: true } } }`.
+### 1. "The Validation Gate" (Request Security)
+*   **Constraint:** Never trust client input.
+*   **Action:** Validate session, then validate request body.
+*   **Bad:** Passing raw dates to upstream without format validation.
+*   **Good:** Strict regex for `YYYY-MM-DD`, enforce `data_inicio <= data_fim`, max 366-day range.
 
-### 2. "Atomic Mutations" (Write Safety)
-*   **Scenario:** Charging a credit card + Updating Balance.
+### 2. "Upstream Resilience" (Data Fetching)
+*   **Scenario:** N8N webhook is down or slow.
 *   **Pattern:**
     ```typescript
-    await db.$transaction(async (tx) => {
-        await tx.payment.create(...);
-        await tx.user.update(...);
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        return await res.json();
+    } catch {
+        clearTimeout(timeout);
+        // Fall back to Google Sheets or mock data
+    }
     ```
 
-### 3. "Defensive Drive" (Security)
-*   User ID manipulation? -> Always derive `userId` from Session, never from Client Input.
-*   Rate Limit? -> Check limits in sensitive actions (Login, Payment).
+### 3. "Defensive Headers" (Security)
+*   CSP headers configured in `next.config.ts`.
+*   X-Frame-Options: DENY, X-Content-Type-Options: nosniff, HSTS enabled.
+*   Session cookies: httpOnly, secure (prod), sameSite: lax, 7-day expiry.
 
 ## Templates / Examples
 
-### The "Deep" Server Action (Atomic & Validated)
+### The Secure API Route (Validated & Rate-Limited)
 ```typescript
-"use server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession } from "@/lib/auth";
 
-import { db } from "@/lib/db";
-import { z } from "zod";
-import { auth } from "@/lib/auth"; // Hypothetical helper
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-const InputSchema = z.object({
-    amount: z.number().positive(),
-    patientId: z.string().uuid()
-});
+export async function POST(request: NextRequest) {
+    // 1. Auth Check
+    const session = await verifySession(request);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-export async function processPayment(rawInput: unknown) {
-    // 1. Auth Check (Layer 0)
-    const session = await auth();
-    if (!session) return { error: "UNAUTHORIZED" };
+    // 2. Input Validation
+    const { data_inicio, data_fim } = await request.json();
+    if (!DATE_REGEX.test(data_inicio) || !DATE_REGEX.test(data_fim)) {
+        return NextResponse.json({ error: "INVALID_DATE_FORMAT" }, { status: 400 });
+    }
 
-    // 2. Validation (Layer 1)
-    const result = InputSchema.safeParse(rawInput);
-    if (!result.success) return { error: "INVALID_INPUT", details: result.error.flatten() };
-    
-    const { amount, patientId } = result.data;
+    // 3. Upstream Call with Timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-        // 3. Atomic Execution (Layer 2)
-        return await db.$transaction(async (tx) => {
-            // Check precondition
-            const patient = await tx.patient.findUnique({ 
-                where: { id: patientId }, 
-                select: { id: true, balance: true } // Strict Select
-            });
-            if (!patient) throw new Error("PATIENT_NOT_FOUND");
-
-            // Execute Logic
-            const transaction = await tx.transaction.create({
-                data: { amount, patientId, type: "INCOME" }
-            });
-
-            await tx.patient.update({
-                where: { id: patientId },
-                data: { balance: { increment: amount } }
-            });
-
-            return { success: true, transactionId: transaction.id };
+        const response = await fetch(process.env.N8N_WEBHOOK_URL!, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data_inicio, data_fim }),
+            signal: controller.signal,
         });
-    } catch (e: any) {
-        // 4. Controlled Failure (Layer 3)
-        if (e.message === "PATIENT_NOT_FOUND") return { error: "PATIENT_NOT_FOUND" };
-        console.error("Critical Payment Failure:", e);
-        return { error: "INTERNAL_ERROR" };
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            return NextResponse.json({ error: "UPSTREAM_ERROR" }, { status: 502 });
+        }
+
+        const data = await response.json();
+        return NextResponse.json(data);
+    } catch (error) {
+        clearTimeout(timeout);
+        return NextResponse.json({ error: "UPSTREAM_TIMEOUT" }, { status: 504 });
     }
 }
 ```

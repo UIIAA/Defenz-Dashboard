@@ -34,53 +34,56 @@
 
 @layer base {
   :root {
-    /* Deep Corporate Theme - "Midnight Executive" */
-    --background: hsl(222 47% 11%);
-    /* #0f172a - Slate 900 */
-    --foreground: hsl(210 40% 98%);
-    /* Slate 50 */
+    /* Defenz Lux Theme - "White & Red" */
+    --background: hsl(0 0% 100%);
+    /* White */
+    --foreground: hsl(210 40% 10%);
+    /* Slate 900 - Sharp text */
 
-    --card: hsl(222 47% 11%);
-    --card-foreground: hsl(210 40% 98%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(210 40% 10%);
 
-    --popover: hsl(222 47% 11%);
-    --popover-foreground: hsl(210 40% 98%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(210 40% 10%);
 
-    --primary: hsl(217 91% 60%);
-    /* Blue 500 */
-    --primary-foreground: hsl(222 47% 11%);
+    --primary: hsl(350 89% 60%);
+    /* Vivid Red/Crimson */
+    --primary-foreground: hsl(0 0% 98%);
 
-    --secondary: hsl(215 27.9% 16.9%);
-    /* Slate 800 */
-    --secondary-foreground: hsl(210 40% 98%);
+    --secondary: hsl(210 40% 96.1%);
+    /* Slate 100 */
+    --secondary-foreground: hsl(222 47% 11%);
 
-    --muted: hsl(215 27.9% 16.9%);
-    --muted-foreground: hsl(215 20.2% 65.1%);
+    --muted: hsl(210 40% 96.1%);
+    --muted-foreground: hsl(215 16% 47%);
 
-    --accent: hsl(215 27.9% 16.9%);
-    --accent-foreground: hsl(210 40% 98%);
+    --accent: hsl(210 40% 96.1%);
+    --accent-foreground: hsl(222 47% 11%);
 
-    --destructive: hsl(0 62.8% 30.6%);
+    --destructive: hsl(0 84% 60%);
     --destructive-foreground: hsl(210 40% 98%);
 
-    --border: hsl(215 27.9% 16.9%);
-    --input: hsl(215 27.9% 16.9%);
-    --ring: hsl(224 71.4% 4.1%);
+    --border: hsl(214 32% 91%);
+    /* Slate 200 */
+    --input: hsl(214 32% 91%);
+    --ring: hsl(350 89% 60%);
+    /* Red Ring */
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
+    /* Subtle Lux Gradient - White to very pale grey with faint red hint */
     background-image:
-      radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.1) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%);
+      radial-gradient(at 100% 0%, rgba(220, 38, 38, 0.03) 0px, transparent 40%),
+      radial-gradient(at 0% 100%, rgba(243, 244, 246, 1) 0px, transparent 50%);
     background-attachment: fixed;
   }
 }
 
 @layer utilities {
   .glass-panel {
-    @apply bg-slate-900/40 backdrop-blur-xl border border-white/10 shadow-xl;
+    @apply bg-white/60 backdrop-blur-xl border border-slate-200/50 shadow-xl;
   }
 
   .text-gradient {

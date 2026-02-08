@@ -42,7 +42,7 @@ Generate a SINGLE Markdown code block. The content must reflect the depth of you
 > * **Key Constraints:** [Hard rules found during research, e.g., "Max file size 5MB"]
 
 ## Context & Rules
-* **Project:** Grafono / Defenz / User Projects.
+* **Project:** Defenz / User Projects.
 * **Non-Negotiables:** [Strict rules derived from Step C]
 
 ## Workflow / Steps

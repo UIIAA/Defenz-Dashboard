@@ -15,7 +15,7 @@ Orchestration of "Premium Experiences" by combining cinematic visuals, scrollyte
 > * **Functional Solidity (Dan Buica Standard):** "Vibe Coding" iteration loop, real utility (Backend integration), mobile-first speed (Airlift logic).
 
 ## Context & Rules
-*   **Project:** Grafono & Premium Web Projects.
+*   **Project:** Defenz Dashboard & Premium Web Projects.
 *   **Non-Negotiables:**
     1.  **Zero Noise:** If it doesn't add value or narrative, remove it.
     2.  **Kinematic First:** Every scroll must trigger a subtle but premium reaction.

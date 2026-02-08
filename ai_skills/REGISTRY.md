@@ -55,7 +55,7 @@
 | Skill Creator | `core/meta/skill_creator.md` | Meta | planner |
 | Testing Deep | `core/skills/testing_deep.md` | QA | reviewer |
 
-### Project Skills (Grafono-specific)
+### Project Skills (Defenz-specific)
 
 | Skill | File | Type | Used By |
 |-------|------|------|---------|
@@ -63,8 +63,7 @@
 | Design Architecture | `project/tech_stack/design_architecture.md` | Frontend | designer |
 | Frontend Premium | `project/tech_stack/frontend_premium.md` | Frontend | builder, designer |
 | Backend Deep | `project/tech_stack/backend_deep.md` | Backend | builder |
-| Financial Logic | `project/domain/financial_logic.md` | Domain | builder |
-| Regras Clinicas | `project/domain/regras_clinicas.md` | Domain | builder |
+| Sales Pipeline & KPIs | `project/domain/financial_logic.md` | Domain | builder |
 | Fluxos N8N | `project/domain/fluxos_n8n.md` | Domain | builder |
 
 ---
@@ -102,7 +101,6 @@ ai_skills/
     │
     └── domain/
         ├── financial_logic.md
-        ├── regras_clinicas.md
         └── fluxos_n8n.md
 ```
 

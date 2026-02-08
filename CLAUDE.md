@@ -4,311 +4,458 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Grafono** is a comprehensive patient management system for speech therapy professionals (Fonoaudiologia), built with Next.js 16 and deployed on Vercel. The application manages patient records, appointments, assessments, financial tracking, and provides AI-assisted features for clinical documentation.
+**Defenz Dashboard** is a multi-page sales intelligence platform for the Defenz cybersecurity company. It provides executive metrics (revenue, commissions, funnel) and operational deal tracking (activity timelines, aging, stale alerts). Data is sourced from Google Sheets (populated by an N8N workflow from Zoho CRM, Apollo, and Microsoft Calendar). There is no database.
 
 ## Key Technologies
 
-- **Framework**: Next.js 16.1.1 (App Router, serverless architecture)
-- **Database**: PostgreSQL with Prisma ORM
-- **Authentication**: NextAuth.js v4 with credentials provider (bcrypt hashed passwords)
-- **UI**: Tailwind CSS 4 + shadcn/ui components (Radix UI primitives)
-- **State Management**: Zustand + TanStack Query
-- **AI Integration**: Google Generative AI SDK
-- **Forms**: React Hook Form + Zod validation
+- **Framework**: Next.js 16 (App Router)
+- **Runtime**: React 19
+- **Styling**: Tailwind CSS 4 with CSS custom properties ("Defenz Lux" theme)
+- **Animations**: Framer Motion
+- **Charts**: Custom SVG funnel chart (`FunnelChart.tsx`)
+- **Date handling**: date-fns with pt-BR locale, react-day-picker
+- **UI primitives**: Radix UI (Popover), Lucide icons
+- **Auth**: Custom HMAC-SHA256 signed cookies (no NextAuth, no third-party auth)
+- **Utilities**: clsx, tailwind-merge
 
 ## Development Commands
 
 ```bash
-# Development
-npm run dev                    # Start dev server at localhost:3000
-
-# Database
-npm run db:push               # Push schema changes to database
-npm run db:generate           # Generate Prisma client
-npm run db:migrate            # Create and apply migrations
-npm run db:reset              # Reset database (WARNING: deletes all data)
-
-# Production
-npm run build                 # Build for production (includes prisma db push)
-npm run start                 # Start production server
-npm run lint                  # Run ESLint
-
-# Note: postinstall script auto-runs prisma generate after npm install
+npm run dev       # Start dev server (Turbopack)
+npm run build     # Production build
+npm run start     # Start production server
+npm run lint      # Run ESLint
 ```
 
-## Project Architecture
+There are no database commands, no test commands, and no test suite.
 
-### Route Structure
+## Architecture
 
-The app uses Next.js App Router with route groups:
+### File Structure
 
-- **`(app)/`** - Protected application routes (requires authentication)
-  - `/dashboard` - Main dashboard with metrics
-  - `/pacientes` - Patient management (Kanban board + table view)
-  - `/agenda` - Appointment scheduling
-  - `/financeiro` - Financial management
-    - `/adimplencia` - Payment compliance tracking
-  - `/avaliacoes` - Clinical assessments
-  - `/exames` - Patient exams
-  - `/relatorios` - Clinical reports
-  - `/modelos` - Document templates
-  - `/metricas` - Analytics and metrics
-  - `/configuracoes` - Professional settings
-  - `/calculadora` - Clinical calculators
+```
+src/
+├── app/
+│   ├── layout.tsx                    # Root layout (Outfit + Inter fonts, pt-BR lang)
+│   ├── globals.css                   # Defenz Lux theme (white + red) + Tailwind 4
+│   ├── login/
+│   │   ├── page.tsx                  # Login page (password-only)
+│   │   ├── actions.ts                # Server action: loginAction
+│   │   └── _components/
+│   │       └── LoginForm.tsx         # Client-side login form
+│   ├── (dashboard)/                  # Route group (shared navbar + DateRangeProvider)
+│   │   ├── layout.tsx                # Navbar + ClientProviders + ErrorBoundary
+│   │   ├── providers.tsx             # Client-side DateRangeProvider wrapper
+│   │   ├── page.tsx                  # / → ExecutiveDashboard
+│   │   ├── operacional/
+│   │   │   └── page.tsx              # /operacional → OperationalDashboard
+│   │   ├── atividade/
+│   │   │   └── page.tsx              # /atividade → Stub (V4.0)
+│   │   └── metas/
+│   │       └── page.tsx              # /metas → Stub (V5.0)
+│   └── api/
+│       ├── dashboard/route.ts        # POST: proxies date range to N8N webhook
+│       ├── dashboard-sheets/route.ts # GET: reads metrics from Google Sheets
+│       ├── operational/route.ts      # GET: reads deals + activities from Sheets
+│       └── auth/logout/route.ts      # GET: clears session cookie, redirects to /login
+├── components/
+│   ├── ErrorBoundary.tsx             # React error boundary with reload button
+│   ├── navigation/
+│   │   ├── AppNavbar.tsx             # Top navbar (logo, nav links, date filter, logout)
+│   │   └── NavLink.tsx               # Link with active state via usePathname
+│   ├── dashboard/
+│   │   ├── ExecutiveDashboard.tsx     # Executive page (stats, funnel, tables)
+│   │   ├── StatCard.tsx              # Reusable metric card
+│   │   ├── DealRow.tsx               # Deal row with origin badge
+│   │   ├── DealsTable.tsx            # Scrollable deals table
+│   │   ├── PartnersCard.tsx          # Partners list
+│   │   └── LastClientCard.tsx        # Last closed client card
+│   ├── operational/
+│   │   ├── OperationalDashboard.tsx   # Operational page (pipeline, activities)
+│   │   ├── DealPipelineRow.tsx        # Expandable deal row with aging + timeline
+│   │   ├── ActivityTimeline.tsx       # Activity timeline per deal
+│   │   ├── DealAgingBadge.tsx         # Color-coded days-in-stage badge
+│   │   └── StaleAlert.tsx             # Red stale activity alert
+│   ├── shared/
+│   │   └── ErrorState.tsx            # Error display with retry
+│   ├── charts/
+│   │   └── FunnelChart.tsx           # Custom SVG sales funnel visualization
+│   └── ui/
+│       ├── MagicCard.tsx             # Animated card with gradient border effect
+│       ├── DateFilter.tsx            # Date range picker (preset ranges + custom)
+│       ├── calendar.tsx              # shadcn/ui calendar (react-day-picker)
+│       └── popover.tsx               # shadcn/ui popover (Radix)
+├── hooks/
+│   ├── useDashboardData.ts           # Executive data fetch cascade
+│   └── useOperationalData.ts         # Operational data fetch + cache
+├── providers/
+│   └── DateRangeProvider.tsx          # Shared date range context
+├── lib/
+│   ├── auth.ts                       # HMAC-JWT session management
+│   ├── types.ts                      # All TypeScript interfaces
+│   ├── formatters.ts                 # Currency, date, origin formatting
+│   ├── validation.ts                 # N8N data validation + consistency
+│   ├── cache.ts                      # sessionStorage cache utilities
+│   ├── mock-data.ts                  # Mock data generator (fallback)
+│   └── utils.ts                      # cn() utility (clsx + tailwind-merge)
+└── middleware.ts                     # Auth guard: redirects unauthenticated users to /login
+```
 
-- **`(site)/`** - Public-facing pages
-  - `/landing` - Landing page
-  - `/sobre` - About page
-  - `/blog` - Blog with MDX support
+### Multi-Page Architecture (V3.0)
 
-- **`/portal`** - Patient portal (separate auth context)
-- **`/login`** - Login page
+The dashboard uses a Next.js App Router route group `(dashboard)` with shared layout:
 
-### Server Actions Pattern
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/` | `ExecutiveDashboard` | Executive metrics: commissions, win rate, funnel, deals tables |
+| `/operacional` | `OperationalDashboard` | Deal pipeline: aging, activity timelines, stale alerts |
+| `/atividade` | Stub | Planned V4.0: Activity per seller |
+| `/metas` | Stub | Planned V5.0: Weekly targets TV dashboard |
+| `/login` | LoginForm | Password-only auth (outside route group) |
 
-All database operations use Next.js Server Actions located in `src/app/actions/`:
+The route group layout wraps all pages with `ErrorBoundary`, `DateRangeProvider`, and `AppNavbar`.
 
-- `patient.ts` - Patient CRUD operations
-- `appointment.ts` - Appointment management
-- `finance.ts` - Transaction handling
-- `assessment.ts` - Clinical assessments
-- `exam.ts` - Exam records
-- `report.ts` - Clinical reports
-- `evolution.ts` - Patient evolution notes
-- `template.ts` - Document templates
-- `reminders.ts` - Reminder system
-- `ai.ts` - AI-powered features
-- `dashboard.ts` - Dashboard data aggregation
-- `settings.ts` - User settings
+### Authentication
 
-**Pattern**: Each action file exports async functions marked with `"use server"`. Always use these instead of direct Prisma calls in client components.
+Password-only authentication using a custom HMAC-SHA256 token system (no user accounts, no NextAuth):
 
-### Authentication Flow
+1. User enters password at `/login`
+2. `loginAction` (server action) compares against `DASHBOARD_PASSWORD` env var using constant-time comparison
+3. On success, creates an HMAC-signed session token and sets it as an httpOnly cookie (`defenz_session`, 7-day expiry)
+4. `src/middleware.ts` verifies the session cookie on every request (except `/login`, `/_next`, `/favicon.ico`)
+5. Logout via `GET /api/auth/logout` clears the cookie and redirects to `/login`
 
-Authentication is handled by NextAuth.js with a custom credentials provider:
+Key files:
+- `src/lib/auth.ts` — `createSession()`, `verifySession()`, `constantTimeEqual()`, HMAC sign/verify
+- `src/app/login/actions.ts` — `loginAction` server action
+- `src/middleware.ts` — auth guard
 
-1. Auth configuration: `src/lib/auth.ts`
-2. API route: `src/app/api/auth/[...nextauth]/route.ts`
-3. Middleware protection: `src/middleware.ts`
-4. Login page: `src/app/login/page.tsx`
+### Data Flow
 
-**Session management**: JWT strategy with session data stored in tokens. User ID, name, and email are available in session callbacks.
+1. `Dashboard.tsx` calls `POST /api/dashboard` with `{ data_inicio, data_fim }` (YYYY-MM-DD format)
+2. `src/app/api/dashboard/route.ts` validates the session, rate-limits by IP, validates dates, then proxies to the N8N webhook
+3. Response is validated client-side by `validateN8nData()` and checked for consistency by `checkConsistency()`
+4. If the webhook fails or returns unexpected data, the dashboard falls back to mock data (`generateMockData()`)
 
-**Password setup**: New users need passwords set manually via SQL (see `INSTRUCOES_ACESSAR_LOGIN.md`).
+### N8N Data Shape (`N8nData` interface)
 
-**Required environment variables**:
-- `NEXTAUTH_SECRET` - Random string for JWT encryption
-- `NEXTAUTH_URL` - App URL (auto-configured on Vercel)
-- `DATABASE_URL` - PostgreSQL connection string
-- `GOOGLE_GENERATIVE_AI_API_KEY` - Required for AI features
-
-### Database Schema Overview
-
-Key models and their relationships (see `prisma/schema.prisma`):
-
-**Core entities**:
-- `User` - Professionals and patients (role-based)
-- `Patient` - Patient records with CRM fields
-- `Appointment` - Scheduled sessions
-- `Transaction` - Income/expense tracking
-- `Evolution` - Session notes with speech-to-text support
-
-**Clinical data**:
-- `Assessment` - Initial/progress evaluations
-- `Exam` - External exam results
-- `Report` - Generated clinical reports
-- `Goal` - Treatment objectives
-- `Exercise` - Home exercises
-
-**System features**:
-- `Template` - Reusable document templates (atestados, encaminhamentos)
-- `Reminder` - Task/deadline tracking
-- `Notification` - User notifications
-- `AvailabilityConfig` - Professional schedule configuration
-- `PatientKnowledgeBase` - AI-indexed patient history
-
-**Important fields**:
-- Patient status: Lead, Avaliação, Em Terapia, Em Espera, Alta, Arquivado
-- Financial source: PARTICULAR, CONVENIO
-- Transaction flow: INCOME, EXPENSE
-- Reevaluation intervals: 3_MONTHS, 6_MONTHS, 1_YEAR, NONE
-
-### Database Access
-
-Always use the singleton Prisma client from `src/lib/db.ts`:
+The webhook returns a JSON object with these fields:
 
 ```typescript
-import { db } from "@/lib/db";
-```
-
-**Never** instantiate new PrismaClient instances. The singleton pattern prevents connection exhaustion in serverless environments.
-
-### Component Organization
-
-- `src/components/ui/` - shadcn/ui primitives (do not modify directly)
-- `src/components/` - Shared application components
-- `src/app/(app)/[route]/_components/` - Route-specific components (use underscore prefix)
-
-**Convention**: Page-specific components live in `_components` subdirectories within their route folders.
-
-### AI Features
-
-The app uses Google's Generative AI for:
-- Clinical note summarization
-- Document generation from templates
-- Patient history context analysis
-
-AI logic is centralized in `src/app/actions/ai.ts`. Always use server actions for AI calls to protect API keys.
-
-### Financial System
-
-The financial module supports:
-- Income tracking (PARTICULAR/CONVENIO)
-- Expense management (FIXED/VARIABLE)
-- Monthly compliance reports
-- Transaction status: pago, pendente, atrasado, aguardando_repasse
-
-**Reference IDs**: Use format `MONTHLY_MMM_YYYY` for recurring monthly payments or `APT_[id]` for appointment-linked transactions.
-
-### WhatsApp Integration
-
-WhatsApp messaging helper in `src/lib/whatsapp.ts` generates `wa.me` links for:
-- Payment reminders
-- Appointment confirmations
-- General patient communication
-
-## Build Configuration
-
-**Next.js config** (`next.config.ts`):
-- TypeScript build errors are ignored (`ignoreBuildErrors: true`)
-- React Strict Mode disabled
-- Turbopack enabled for development
-
-**Build process** (`package.json` build script):
-1. `prisma db push --accept-data-loss` - Sync schema to database
-2. `prisma generate` - Generate Prisma client
-3. `next build` - Build Next.js app
-
-**Deployment**: Optimized for Vercel serverless deployment. The app was migrated from a custom server architecture (Socket.IO removed).
-
-## Important Notes
-
-### TypeScript Configuration
-- Path alias `@/*` maps to `src/*`
-- `noImplicitAny: false` - implicit any is allowed
-- `jsx: "react-jsx"` - uses new JSX transform
-
-### Vercel Deployment
-- Build command includes Prisma schema push
-- Uses PostgreSQL (migrated from SQLite)
-- No WebSocket support (previously used Socket.IO, now removed)
-- All environment variables must be set in Vercel dashboard
-
-### Patient Management
-- Kanban board uses `@dnd-kit` for drag-and-drop
-- Patient status updates trigger automatic notifications
-- Reevaluation reminders are calculated based on `reevaluationInterval`
-
-### Security
-- All passwords are bcrypt-hashed before storage
-- Middleware protects: `/dashboard`, `/agenda`, `/pacientes`, `/financeiro`, `/configuracoes`, `/relatorios`, `/metricas`, `/modelos`
-- **Note**: `/avaliacoes`, `/exames`, `/calculadora` routes exist but are NOT protected by middleware
-- API routes under `/api/auth` are public for NextAuth flow
-
-### Known Constraints
-- Build ignores TypeScript errors (fix gradually, don't add new errors)
-- React Strict Mode disabled (may cause double-rendering issues when re-enabled)
-- Database uses `db push` instead of migrations in production build
-
-## Local Development with Production Database (Neon)
-
-O banco de dados é PostgreSQL hospedado no Neon. Para rodar scripts localmente contra o banco de produção:
-
-```bash
-# 1. Linkar projeto Vercel (apenas primeira vez)
-vercel link --yes --project gra-fono
-
-# 2. Puxar variáveis de ambiente
-vercel env pull .env.local
-
-# 3. IMPORTANTE: Atualizar .env com DATABASE_URL do Neon
-# O .env pode ter URL antiga do SQLite. Copiar a DATABASE_URL do .env.local:
-DATABASE_URL=$(grep "DATABASE_URL" .env.local) && sed -i '' "s|DATABASE_URL=.*|$DATABASE_URL|" .env
-
-# 4. Rodar scripts de seed
-npx tsx scripts/seed-patients.ts
-```
-
-**Scripts de seed disponíveis**:
-- `scripts/seed-patients.ts` - Adiciona pacientes e transações mensais
-
-**Estrutura de dados para novos pacientes**:
-```typescript
-{
-  name: "Nome do Paciente",
-  responsibleName: "Nome do Responsável", // Salvo em motherName
-  timesPerWeek: 2,                         // Salvo em observations
-  type: "Intervenção",                     // Salvo em observations
-  paymentDueDay: 5,                        // Dia do vencimento
-  value: 1000,                             // negotiatedValue + Transaction
+interface N8nData {
+  data: string;              // Date string
+  hora: string;              // Time string
+  periodo: string;           // Period description
+  ligacoes: number;          // Total calls
+  ligacoes_atendidas: number; // Answered calls
+  taxa_conectividade: number; // Connection rate (%)
+  emails: number;
+  reunioes: number;          // Meetings
+  apresentacoes: number;     // Presentations
+  propostas: number;         // Proposals
+  deals_novos: number;       // New deals
+  deals_fechados: number;    // Closed deals
+  valor_pipeline: number;    // Pipeline value (BRL)
+  valor_fechado: number;     // Closed revenue (BRL)
+  ultimo_cliente: Client;    // Last closed client
+  parceiros: Partners;       // Active partners
+  deals_ativos: Deal[];      // Active deals list
+  clientes_fechados: Deal[]; // Closed clients list
 }
 ```
 
-## AI Skills System (v2.0)
+### Date Filtering
 
-The `ai_skills/` directory contains a portable agent orchestration framework. It is split into two layers:
+The `DateFilter` component provides preset ranges and a custom calendar picker:
 
-### Structure
+- Presets: Hoje (today), 7 Dias, 15 Dias, 30 Dias, Este Mes (current month)
+- Custom: calendar date range picker via react-day-picker
+- Custom ranges are encoded as `custom:YYYY-MM-DD:YYYY-MM-DD` in state
 
-```
-ai_skills/
-├── REGISTRY.md              # Single source of truth (read first)
-├── core/                    # PORTABLE - copy to any project
-│   ├── meta/                # Protocols (master_protocol, engineering_framework, skill_creator)
-│   ├── agents/              # Agent definitions (explorer, planner, builder, designer, reviewer, documenter)
-│   └── skills/              # Generic skills (testing_deep)
-└── project/                 # PROJECT-SPECIFIC (Grafono)
-    ├── standards.md         # Architecture & coding conventions
-    ├── tech_stack/          # backend_deep, frontend_premium, design_architecture
-    └── domain/              # financial_logic, regras_clinicas, fluxos_n8n
-```
+## Environment Variables
 
-### Model Protocol
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AUTH_SECRET` | Yes | HMAC signing key (min 32 chars) for session tokens |
+| `DASHBOARD_PASSWORD` | Yes | Single shared password for dashboard access |
+| `N8N_WEBHOOK_URL` | Yes | Full URL of the N8N webhook that returns sales data |
 
-| Tier | Model | Usage |
-|------|-------|-------|
-| **Opus** | claude-opus-4-5 | Main chat only (architecture, decisions) |
-| **Sonnet** | claude-sonnet-4-5 | All Task-based execution agents |
-| **Haiku** | claude-haiku-4 | Documenter agent, simple queries |
+## Security
 
-### Agent Catalog
+The application implements several security hardening measures:
 
-| Agent | Task subagent_type | Model | Purpose |
-|-------|--------------------|-------|---------|
-| `explorer` | `Explore` | Sonnet | Navigate and understand codebases |
-| `planner` | `Plan` | Sonnet | Design implementation strategies |
-| `builder` | `general-purpose` | Sonnet | Write and modify code |
-| `designer` | `Super-designer` | Sonnet | Premium visual design |
-| `reviewer` | `general-purpose` | Sonnet | Code review, QA governance |
-| `documenter` | `general-purpose` | Haiku | Documentation and reports |
+- **CSP headers**: Configured in `next.config.ts` — restricts `default-src`, `script-src`, `frame-ancestors`
+- **Additional headers**: X-Frame-Options (DENY), X-Content-Type-Options (nosniff), HSTS, Referrer-Policy, Permissions-Policy
+- **Rate limiting**: In-memory rate limiter on `/api/dashboard` (30 requests/minute per IP, max 1000 tracked IPs)
+- **Session cookies**: httpOnly, secure (in production), sameSite: lax, 7-day expiry
+- **Constant-time password comparison**: Prevents timing attacks on login
+- **Date validation**: Strict YYYY-MM-DD format, max 366-day range, `data_inicio <= data_fim`
+- **Request timeout**: 15s abort on upstream N8N calls
+- **Client-side validation**: `validateN8nData()` sanitizes all fields from the webhook response
+- **Source maps disabled**: `productionBrowserSourceMaps: false`
 
-### Usage Pattern
+## Design System
 
-1. Read `ai_skills/REGISTRY.md` to identify the right agent
-2. Load `core/agents/{id}/AGENT.md` + its listed skills
-3. Invoke via `Task(subagent_type, model, prompt)` with context embedded
+**Theme**: "Defenz Lux" — white background with red (#dc2626) accents
 
-### Portability
+- **Fonts**: Outfit (display/headings via `--font-outfit`) + Inter (body via `--font-inter`)
+- **Primary color**: `hsl(350 89% 60%)` (vivid red/crimson)
+- **Cards**: Use `<MagicCard>` component with animated gradient border on hover
+- **Animations**: Framer Motion for page transitions, stat reveals, and list items
+- **Currency**: BRL format via `Intl.NumberFormat('pt-BR', ...)`
+- **Language**: All UI text is in Brazilian Portuguese
 
-To reuse in another project: copy `core/` and `REGISTRY.md`, then create a new `project/` with project-specific skills.
+## Important Notes
+
+- **No database**: All data comes from the N8N webhook. There is no Prisma, no ORM, no database.
+- **No tests**: There is no test suite or test runner configured.
+- **Mock fallback**: When the N8N webhook fails, the dashboard renders mock data rather than showing an error state. The mock data generator is in `Dashboard.tsx` (`generateMockData()`).
+- **Client-side throttle**: Dashboard enforces a 5-second minimum interval between fetches to prevent rapid re-requests.
+- **Consistency warnings**: The dashboard validates data consistency (e.g., `deals_fechados` count vs `clientes_fechados` array length) and shows a warning icon in the header if discrepancies are found.
+- **TypeScript strict mode**: Enabled in `tsconfig.json`.
+- **Path alias**: `@/*` maps to `src/*`.
 
 ## File Locations Reference
 
-**Authentication**: `src/lib/auth.ts`, `src/middleware.ts`
-**Database client**: `src/lib/db.ts`
-**Server actions**: `src/app/actions/*.ts`
-**UI components**: `src/components/ui/*.tsx`
-**Prisma schema**: `prisma/schema.prisma`
-**Seed scripts**: `scripts/*.ts`
-**AI Skills**: `ai_skills/REGISTRY.md` (start here)
-**Environment variables**: `.env` (production DATABASE_URL), `.env.local` (pulled from Vercel)
+| Purpose | File |
+|---------|------|
+| Auth (HMAC sessions) | `src/lib/auth.ts` |
+| Auth guard middleware | `src/middleware.ts` |
+| Login server action | `src/app/login/actions.ts` |
+| API proxy to N8N | `src/app/api/dashboard/route.ts` |
+| API Google Sheets (executive) | `src/app/api/dashboard-sheets/route.ts` |
+| API Operational (deals+activities) | `src/app/api/operational/route.ts` |
+| Logout endpoint | `src/app/api/auth/logout/route.ts` |
+| Route group layout | `src/app/(dashboard)/layout.tsx` |
+| Executive dashboard | `src/components/dashboard/ExecutiveDashboard.tsx` |
+| Operational dashboard | `src/components/operational/OperationalDashboard.tsx` |
+| Navigation | `src/components/navigation/AppNavbar.tsx` |
+| Shared types | `src/lib/types.ts` |
+| Executive data hook | `src/hooks/useDashboardData.ts` |
+| Operational data hook | `src/hooks/useOperationalData.ts` |
+| Date range context | `src/providers/DateRangeProvider.tsx` |
+| Funnel chart | `src/components/charts/FunnelChart.tsx` |
+| Date filter | `src/components/ui/DateFilter.tsx` |
+| Theme / CSS | `src/app/globals.css` |
+| Next.js config (CSP) | `next.config.ts` |
+| Documentacao Arquitetura | `docs/NOVA_ARQUITETURA_N8N.md` |
+
+---
+
+## CHANGELOG - Fevereiro 2026
+
+### 2026-02-04: Nova Arquitetura de Dados
+
+**Problema identificado:** Os filtros de periodo (7 dias, 15 dias, etc.) nao funcionavam corretamente porque o N8N fazia multiplas chamadas de API em tempo real, causando lentidao e dados inconsistentes.
+
+**Solucao implementada:**
+
+#### 1. Nova API Route: `/api/dashboard-sheets`
+
+Criada nova rota que le dados diretamente do Google Sheets:
+- Arquivo: `src/app/api/dashboard-sheets/route.ts`
+- Le da aba `metricas` da planilha `19-01_Dashboard_Defenz`
+- Cache em memoria de 30 minutos
+- Fallback automatico para N8N se a planilha nao tiver dados
+
+#### 2. Cache no Cliente (sessionStorage)
+
+O Dashboard agora implementa cache local:
+- Dados sao salvos no `sessionStorage` por 30 minutos
+- Ao trocar de filtro, primeiro verifica o cache
+- Indicador visual mostra a fonte dos dados: Cache, Planilha, N8N, ou Mock
+
+#### 3. Indicador de Fonte de Dados
+
+No header do dashboard, apos "Atualizado:", aparece um badge colorido:
+- **Azul (Cache)**: Dados do cache local
+- **Verde (Planilha)**: Dados do Google Sheets
+- **Amarelo (N8N)**: Dados do webhook em tempo real
+- **Cinza (Mock)**: Dados simulados (fallback)
+
+#### 4. Estrutura da Planilha (V2.2 - Atualizada 2026-02-07)
+
+A planilha `19-01_Dashboard_Defenz` tem 3 abas:
+
+**Aba `metricas`** (5 linhas, 1 por periodo):
+
+| Coluna | Descricao |
+|--------|-----------|
+| data_coleta | Data da coleta (YYYY-MM-DD) |
+| periodo | Identificador: `hoje`, `7d`, `15d`, `30d`, `mes` |
+| data_inicio | Inicio do periodo |
+| data_fim | Fim do periodo |
+| ligacoes | Total de ligacoes (Zoho Calls) |
+| ligacoes_atendidas | Ligacoes atendidas |
+| taxa_conectividade | Percentual (0-100) |
+| emails | Emails enviados pelo Apollo (APENAS Apollo no V1) |
+| reunioes | Reunioes de pipeline (filtradas por `<>` no Subject) |
+| apresentacoes | Deals com [APRESENTACAO] |
+| propostas | Deals com Stage "Proposta Enviada" ou [PROPOSTA] |
+| deals_ativos | Quantidade de deals ativos |
+| deals_fechados | Quantidade fechados no periodo |
+| valor_pipeline | Soma dos deals ativos |
+| valor_fechado | Soma dos fechados |
+| ultimo_cliente_nome | Nome do ultimo cliente |
+| ultimo_cliente_origem | Origem do ultimo cliente |
+| ultimo_cliente_valor | Valor do ultimo cliente |
+| **comissao_pipeline** | Soma das comissoes dos deals ativos (V2.2) |
+| **comissao_fechado** | Soma das comissoes dos deals fechados no periodo (V2.2) |
+| **ticket_medio** | Valor medio por deal (V2.2) |
+| **win_rate** | % deals ganhos / (ganhos + perdidos) (V2.2) |
+
+**Aba `deals_ativos`** (snapshot de todos os deals ativos):
+
+| Coluna | Descricao |
+|--------|-----------|
+| id | ID do deal no Zoho |
+| data | Data da coleta |
+| nome | Nome do deal |
+| empresa | Account_Name do Zoho |
+| stage | Stage atual do deal |
+| valor | Valor bruto (Amount) |
+| origem | Lead_Source crua do Zoho |
+| categoria | securisoft, direto, ou parceiro |
+| comissao_valor | Valor da comissao Defenz |
+| modified_time | Data ultima modificacao (Zoho) (V3.0) |
+| days_in_stage | Dias no stage atual (V3.0) |
+| last_activity_date | Data da ultima atividade (V3.0) |
+| last_activity_type | call/email/meeting/none (V3.0) |
+
+**Aba `clientes_fechados`** (todos os deals com Stage "Fechado Ganho"):
+
+| Coluna | Descricao |
+|--------|-----------|
+| id | ID do deal no Zoho |
+| data | Closing_Date |
+| nome | Nome do deal |
+| empresa | Account_Name do Zoho |
+| valor | Valor bruto (Amount) |
+| **origem** | Lead_Source crua do Zoho (V2.2) |
+| **categoria** | securisoft, direto, ou parceiro (V2.2) |
+| comissao_valor | Valor da comissao Defenz |
+
+**Aba `atividades`** (atividades correlacionadas a deals, V3.0):
+
+| Coluna | Descricao |
+|--------|-----------|
+| deal_id | ID do deal Zoho (ou 'unmatched') |
+| deal_nome | Nome do deal/contato |
+| tipo | `call`, `email`, `meeting` |
+| data | YYYY-MM-DD |
+| descricao | Descricao da atividade |
+| vendedor | Quem realizou |
+
+> **Planilha alimentada automaticamente pelo N8N** (workflow ativo, Cron 6am/18pm + webhook). Agora com 4 abas.
+
+#### 5. Decisoes de Produto V1 (Dashboard Executivo)
+
+| Metrica | Fonte | Filtro | Nota |
+|---------|-------|--------|------|
+| **Ligacoes** | Zoho Calls | `Call_Start_Time` no periodo | Atendidas = Subject contem "atendida" |
+| **Emails** | Apollo.io | `completed_at` no periodo | **Apenas enviados.** Microsoft Emails fora do V1 |
+| **Reunioes** | Microsoft Calendar | **Subject contem `<>`** | Padrao: `[Quem] <> [Cliente]` |
+| **Apresentacoes** | Zoho Deals | `Resultados` contem `[APRESENTACAO]` | |
+| **Propostas** | Zoho Deals | Stage = "Proposta Enviada" OU `[PROPOSTA]` | |
+| **Deals** | Zoho Deals | Stage para ativo/fechado | |
+
+**Convencao de Reunioes:** Para aparecer no funil, o assunto do evento no Outlook deve conter `<>`. Exemplos:
+- `BitDefender <> Consube Agropecuaria` (SecuriSoft agenda)
+- `Defenz <> FDC - Fundacao Dom Cabral` (equipe Defenz agenda)
+
+#### 6. Logica de Comissao (V2.2 - 2026-02-07)
+
+A comissao da Defenz depende da origem do deal (`Lead_Source` no Zoho):
+
+| Lead_Source contem | Categoria | Taxa Defenz |
+|---|---|---|
+| `securisoft` ou `parceiro ss` | securisoft | **5%** |
+| `apollo`, `linkedin`, `cold call`, `chamada surpresa` | direto | **58%** |
+| `parceiro` (generico) | parceiro | **43%** |
+| qualquer outra coisa (default) | direto | **58%** |
+
+A funcao `classifyOrigin()` no Code Node `Consolidar` do N8N aplica essas regras.
+
+**IMPORTANTE**: Se um deal esta classificado errado, corrigir o `Lead_Source` no Zoho CRM. A classificacao e automatica a partir da proxima execucao do workflow.
+
+#### 7. Dashboard Executivo (V2.2 - 2026-02-07)
+
+6 cards em grid 3x2:
+
+| Card | Valor Principal | Subtexto |
+|------|----------------|----------|
+| Comissao Pipeline | `comissao_pipeline` em BRL | X deals ativos — Pipeline: valor_pipeline |
+| Comissao Ganha | `comissao_fechado` em BRL | X negocios ganhos — Total: valor_fechado |
+| Win Rate | `win_rate%` | X ganhos de Y total |
+| Ticket Medio | `ticket_medio` em BRL | Valor medio por deal |
+| Taxa Conectividade | `taxa_conectividade%` | X de Y ligacoes |
+| Ultimo Fechamento | valor do ultimo cliente | Nome do cliente |
+
+**DealRow**: Badge colorido por categoria (`SS 5%` vermelho, `Direto 58%` verde, `Parceiro 43%` azul). Comissao como valor principal, valor bruto como subtexto.
+
+#### 8. Fluxo de Dados V3.0
+
+```
+N8N Workflow: QjnzGicZHIPBNN1g (20 nos, ATIVO)
+Triggers: Cron 6am/18pm + Webhook POST + Manual
+    |
+    +-- Definir periodo (30 dias de lookback)
+    +-- Apollo Emails → Agg Apollo (paginacao)
+    +-- Zoho Deals (todos, com Lead_Source + Modified_Time)
+    +-- Zoho Calls → Agg Calls (paginacao)
+    +-- Microsoft Reunioes (Calendar)
+    +-- Consolidar V3.0:
+    |   - classifyOrigin() por Lead_Source
+    |   - 5 periodos (hoje, 7d, 15d, 30d, mes)
+    |   - Comissao por deal + agregados
+    |   - Win rate (fechados vs perdidos)
+    |   - Ticket medio
+    |   - Correlacao atividades↔deals (calls via Contact_Name, meetings via <>)
+    |   - days_in_stage, last_activity_date, last_activity_type
+    |   - atividades[] array
+    +-- Split → Sheets Metricas (appendOrUpdate por periodo)
+    +-- Split → Sheets Deals Ativos (appendOrUpdate por id)
+    +-- Split → Sheets Clientes Fechados (appendOrUpdate por id)
+    +-- Split Atividades → Sheets Atividades (appendOrUpdate por deal_id+data+tipo)
+    +-- Respond Webhook (JSON completo)
+
+Dashboard (Multi-page)
+    |
+    +-- / (Executivo)
+    |   +-- 1. Cache local (sessionStorage, 30min)
+    |   +-- 2. Google Sheets (/api/dashboard-sheets)
+    |   +-- 3. Fallback N8N (/api/dashboard)
+    |   +-- 4. Fallback Mock data
+    |
+    +-- /operacional
+        +-- 1. Cache local (sessionStorage, 30min)
+        +-- 2. Google Sheets (/api/operational) → deals_ativos + atividades
+```
+
+#### 9. Estado Atual e Proximos Passos
+
+**Concluido V3.0:**
+- [x] Planilha com 4 abas (metricas, deals_ativos, clientes_fechados, atividades)
+- [x] Workflow N8N V3.0 (20 nos) com correlacao de atividades, aging, operational data
+- [x] Multi-page: Executivo (`/`), Operacional (`/operacional`), stubs (`/atividade`, `/metas`)
+- [x] Dashboard.tsx monolito decomposto em 15+ modulos
+- [x] Route group com navbar compartilhada + DateRangeProvider
+- [x] Pagina operacional com deal pipeline, aging badges, stale alerts, activity timeline
+- [x] Removido coluna legada `id_data` do workflow N8N
+- [x] Adicionado `Modified_Time` ao Zoho Deals query
+
+**Pendente / Proximas iteracoes:**
+- [ ] Tornar planilha publica para leitura (necessario para API Sheets funcionar sem OAuth)
+- [ ] Revisar Lead_Source dos deals no Zoho (ex: JRC Law esta como "Parceiro" mas deveria ser "Direto")
+- [ ] Melhorar campo `empresa` (Account_Name vazio no Zoho → "-")
+- [ ] Deals inativos nao sao removidos da aba deals_ativos (limitacao)
+- [ ] V4.0: Dashboard atividade por vendedor (`/atividade`)
+- [ ] V5.0: Dashboard TV com metas semanais (`/metas`)
+
+#### Documentacao Detalhada
+
+Ver arquivo `docs/NOVA_ARQUITETURA_N8N.md` para:
+- Estrutura completa da planilha
+- Codigo do Code Node do N8N com filtros
+- Convencao de reunioes `<>`
+- Fluxo completo dos nos do N8N

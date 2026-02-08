@@ -30,16 +30,16 @@ export const MagicCard = ({ children, className, gradientColor = "from-blue-500/
             transition={{ duration: 0.5 }}
             whileHover={{ y: -5, transition: { duration: 0.2 } }}
             className={cn(
-                "relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-md p-6",
-                "shadow-2xl shadow-black/20",
-                "group hover:border-blue-500/30",
+                "relative overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur-md p-6",
+                "shadow-lg shadow-slate-200/50",
+                "group hover:border-slate-300 hover:shadow-xl hover:shadow-slate-200/60 transition-all duration-500",
                 className
             )}
         >
             <div
                 className={cn(
-                    "pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-300 group-hover:opacity-100",
-                    "bg-gradient-to-r via-blue-500/10 to-transparent",
+                    "pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-500 group-hover:opacity-100",
+                    "bg-gradient-to-r via-slate-100/30 to-transparent",
                     gradientColor
                 )}
             />

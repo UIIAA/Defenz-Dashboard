@@ -18,7 +18,7 @@ Unified protocol for Specification-Driven Development (SDD), Operational Excelle
 >   *   **Observability:** Mandatory for all new features (Log Schema).
 
 ## Context & Rules
-*   **Project:** Grafono (and related Engineering initiatives).
+*   **Project:** Defenz Dashboard (and related Engineering initiatives).
 *   **Non-Negotiables:**
     1.  **Complexity Check:** BEFORE starting, calculate the SDD Score.
     2.  **Protocol Adherence:**

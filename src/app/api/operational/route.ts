@@ -1,0 +1,146 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession } from "@/lib/auth";
+
+const SPREADSHEET_ID = "1U6ley8bTw6SuVqoxLJDlVUFCkkYSAVPz9AZm6AU40p4";
+
+const memoryCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+async function fetchFromSheets(sheetName: string): Promise<any[]> {
+  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}`;
+
+  try {
+    const response = await fetch(url, { next: { revalidate: 1800 } });
+
+    if (!response.ok) {
+      console.error(`Sheets fetch failed: ${response.status}`);
+      return [];
+    }
+
+    const text = await response.text();
+    const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?$/);
+    if (!jsonMatch) {
+      console.error("Could not parse Sheets response");
+      return [];
+    }
+
+    const json = JSON.parse(jsonMatch[1]);
+    const rows = json.table?.rows || [];
+    const cols = json.table?.cols || [];
+    const headers = cols.map((col: any) => (col.label || col.id).trim());
+
+    return rows.map((row: any) => {
+      const obj: any = {};
+      row.c?.forEach((cell: any, i: number) => {
+        const header = headers[i];
+        if (header) {
+          let value = cell?.v ?? null;
+          if (typeof value === 'string' && value.startsWith('Date(')) {
+            const match = value.match(/Date\((\d+),(\d+),(\d+)\)/);
+            if (match) {
+              const year = match[1];
+              const month = String(Number(match[2]) + 1).padStart(2, '0');
+              const day = match[3].padStart(2, '0');
+              value = `${year}-${month}-${day}`;
+            }
+          }
+          obj[header] = value;
+        }
+      });
+      return obj;
+    });
+  } catch (error) {
+    console.error("Error fetching from Sheets:", error);
+    return [];
+  }
+}
+
+const STALE_THRESHOLD_DAYS = 7;
+
+export async function GET(request: NextRequest) {
+  const session = await verifySession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const cacheKey = "operational_data";
+  const cached = memoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json({ ...cached.data, _cached: true });
+  }
+
+  try {
+    const [dealsAtivos, atividades] = await Promise.all([
+      fetchFromSheets("deals_ativos"),
+      fetchFromSheets("atividades")
+    ]);
+
+    // Index activities by deal_id
+    const activityByDeal: Record<string, any[]> = {};
+    atividades.forEach((a: any) => {
+      const dealId = String(a.deal_id || '');
+      if (!activityByDeal[dealId]) activityByDeal[dealId] = [];
+      activityByDeal[dealId].push(a);
+    });
+
+    // Sort activities per deal by date desc
+    Object.values(activityByDeal).forEach(arr => {
+      arr.sort((a: any, b: any) => (b.data || '').localeCompare(a.data || ''));
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Enrich deals with activities and stale status
+    const enrichedDeals = dealsAtivos.map((deal: any) => {
+      const dealId = String(deal.id || '');
+      const activities = activityByDeal[dealId] || [];
+      const lastActivity = activities[0];
+      const daysInStage = Number(deal.days_in_stage) || 0;
+
+      // Determine staleness
+      let isStale = false;
+      if (lastActivity?.data) {
+        const lastDate = new Date(lastActivity.data);
+        const diffDays = Math.round((new Date(today).getTime() - lastDate.getTime()) / 86400000);
+        isStale = diffDays >= STALE_THRESHOLD_DAYS;
+      } else {
+        // No activity at all = stale
+        isStale = true;
+      }
+
+      return {
+        ...deal,
+        valor: Number(deal.valor) || 0,
+        comissao_valor: Number(deal.comissao_valor) || 0,
+        days_in_stage: daysInStage,
+        modified_time: deal.modified_time || '',
+        last_activity_date: lastActivity?.data || deal.last_activity_date || '',
+        last_activity_type: lastActivity?.tipo || deal.last_activity_type || 'none',
+        activities,
+        is_stale: isStale,
+      };
+    });
+
+    const staleDeals = enrichedDeals.filter((d: any) => d.is_stale);
+    const totalPipeline = enrichedDeals.reduce((s: number, d: any) => s + (Number(d.valor) || 0), 0);
+    const avgDaysInStage = enrichedDeals.length > 0
+      ? Math.round(enrichedDeals.reduce((s: number, d: any) => s + (Number(d.days_in_stage) || 0), 0) / enrichedDeals.length)
+      : 0;
+
+    const response = {
+      deals: enrichedDeals,
+      staleCount: staleDeals.length,
+      totalDeals: enrichedDeals.length,
+      totalPipeline,
+      avgDaysInStage,
+      _source: "google_sheets"
+    };
+
+    memoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error("Error in operational route:", error);
+    return NextResponse.json({ error: "Erro ao buscar dados operacionais" }, { status: 500 });
+  }
+}

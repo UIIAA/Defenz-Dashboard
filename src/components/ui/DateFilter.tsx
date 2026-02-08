@@ -21,6 +21,7 @@ const RANGES = [
     { id: '15d', label: '15 Dias' },
     { id: '30d', label: '30 Dias' },
     { id: 'month', label: 'Este Mês' },
+    { id: 'alltime', label: 'All time' },
 ];
 
 export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilterProps) => {

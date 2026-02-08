@@ -25,30 +25,30 @@ Protocol for comprehensive Quality Assurance, enforcing strict testing patterns,
 ## Workflow / Steps
 
 ### 1. The Pyramid of "Chastisement" (Layers)
-*   **Base (Unit):** Logic helpers, Financial calculations (Crucial for Grafono).
-*   **Middle (Integration):** Server Actions + Database (Use an in-memory DB or Docker container for test).
-*   **Top (E2E):** Critical Flows (Login -> Schedule Appointment -> Verify History).
+*   **Base (Unit):** Logic helpers, data validation, currency formatting (Crucial for Defenz Dashboard).
+*   **Middle (Integration):** API routes + upstream mocking (Use mock N8N responses).
+*   **Top (E2E):** Critical Flows (Login -> View Dashboard -> Change Date Filter -> Verify Data).
 
 ### 2. "Edge Case First" Methodology
 *   Before writing code, define the edges:
-    *   *What if the Patient ID is null?*
-    *   *What if the date is Feb 29th?*
-    *   *What if the user clicks the button 10 times rapidly?* (Idempotency).
+    *   *What if the N8N webhook returns null fields?*
+    *   *What if the date range is Feb 29th?*
+    *   *What if the user clicks the filter button 10 times rapidly?* (Throttle check).
 
 ## Templates / Examples
 
 ### 1. Robust Component Test (RTL)
 ```typescript
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MagicCard } from '@/components/ui/magic-card';
+import { MagicCard } from '@/components/ui/MagicCard';
 
 describe('MagicCard Component', () => {
     it('renders and handles rapid interactions', async () => {
         const handleClick = vi.fn();
         render(<MagicCard onClick={handleClick}>Click Me</MagicCard>);
-        
+
         const card = screen.getByText('Click Me');
-        
+
         // Test Visual Presence
         expect(card).toBeInTheDocument();
         expect(card).toHaveClass('backdrop-blur-xl'); // Check Premium Style
@@ -57,7 +57,7 @@ describe('MagicCard Component', () => {
         fireEvent.click(card);
         fireEvent.click(card);
         fireEvent.click(card);
-        
+
         expect(handleClick).toHaveBeenCalledTimes(3);
     });
 
@@ -73,43 +73,42 @@ describe('MagicCard Component', () => {
 ```typescript
 import { test, expect } from '@playwright/test';
 
-test('Critical Flow: Scheduling Appointment', async ({ page }) => {
+test('Critical Flow: Dashboard Date Filter', async ({ page }) => {
     // 1. Setup with Network Interception (Deterministic)
-    await page.route('**/api/n8n/calendar/slots', async route => {
-        await route.fulfill({ status: 200, json: { availableSlots: ['14:00'] } });
+    await page.route('**/api/dashboard', async route => {
+        await route.fulfill({ status: 200, json: { ligacoes: 150, emails: 80, reunioes: 12 } });
     });
 
-    await page.goto('/agenda');
+    await page.goto('/');
 
     // 2. Strict Visual Assertion
-    await expect(page.getByText('Agenda do Dia')).toBeVisible();
-    await expect(page).toHaveScreenshot('agenda-page-initial.png', { maxDiffPixels: 50 });
+    await expect(page.getByText('Ligacoes')).toBeVisible();
+    await expect(page).toHaveScreenshot('dashboard-initial.png', { maxDiffPixels: 50 });
 
-    // 3. User Interaction
-    await page.getByRole('button', { name: '14:00' }).click();
-    await page.getByRole('button', { name: 'Confirmar' }).click();
+    // 3. User Interaction - Change Date Filter
+    await page.getByRole('button', { name: '7 Dias' }).click();
 
-    // 4. Verify Side Effects
-    await expect(page.getByText('Agendamento Confirmado')).toBeVisible();
+    // 4. Verify Data Updated
+    await expect(page.getByText('150')).toBeVisible();
 });
 ```
 
-### 3. Financial Integrity Test (Vitest)
+### 3. Data Validation Test (Vitest)
 ```typescript
-import { calculateReceivable } from '@/lib/finance';
+import { validateN8nData } from '@/components/Dashboard';
 
-test('Calculates Monthly Receivables removing Duplicates', () => {
-    // Scenario: Patient pays Monthly, but has multiple sessions logged
+test('Validates N8N response and sanitizes missing fields', () => {
     const input = {
-        paymentMethod: 'MONTHLY',
-        monthlyValue: 500,
-        sessions: [{ value: 100 }, { value: 100 }] // Should be ignored
+        ligacoes: 100,
+        ligacoes_atendidas: null, // Missing field
+        emails: 50,
+        // ... partial data
     };
 
-    const result = calculateReceivable(input);
-    
-    // The "Chato" check: Ensure we distinctly ignored session values
-    expect(result).toBe(500); 
-    expect(result).not.toBe(700);
+    const result = validateN8nData(input);
+
+    // Should default missing numeric fields to 0
+    expect(result.ligacoes_atendidas).toBe(0);
+    expect(result.ligacoes).toBe(100);
 });
 ```

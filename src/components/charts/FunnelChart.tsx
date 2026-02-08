@@ -9,6 +9,7 @@ interface FunnelStep {
     value: number;
     fill: string;
     label: string;
+    breakdown?: { label: string; value: number }[];
 }
 
 interface FunnelChartProps {
@@ -16,7 +17,7 @@ interface FunnelChartProps {
 }
 
 interface TooltipState {
-    text: string;
+    content: React.ReactNode;
     x: number;
     y: number;
 }
@@ -34,12 +35,12 @@ export const FunnelChart = ({ data }: FunnelChartProps) => {
         );
     }
 
-    const showTooltip = (text: string, e: React.MouseEvent<SVGElement>) => {
+    const showTooltip = (content: React.ReactNode, e: React.MouseEvent<SVGElement>) => {
         const svg = svgRef.current;
         if (!svg) return;
         const rect = svg.getBoundingClientRect();
         setTooltip({
-            text,
+            content,
             x: e.clientX - rect.left,
             y: e.clientY - rect.top - 10,
         });
@@ -199,9 +200,29 @@ export const FunnelChart = ({ data }: FunnelChartProps) => {
                         {stages.map((s, i) => {
                             const isSmall = s.ry < 25;
                             const pctLabel = s.pct % 1 === 0 ? `${s.pct.toFixed(0)}%` : `${s.pct.toFixed(1)}%`;
-                            const tip = i === 0
-                                ? `${s.label}: ${s.value} (topo do funil, refer\u00EAncia 100%)`
-                                : `${s.label} representa ${pctLabel} do total de ${stages[0].label} (${s.value} de ${stages[0].value})`;
+                            const tip: React.ReactNode = (s.breakdown && s.breakdown.length > 0)
+                                ? (
+                                    <div>
+                                        <div className="font-semibold mb-1">
+                                            {s.label}: {s.value} {i === 0 ? '(topo do funil)' : `(${pctLabel} do topo)`}
+                                        </div>
+                                        <div className="border-t border-slate-600 pt-1 mt-1 space-y-0.5">
+                                            {s.breakdown.map((ch, ci) => {
+                                                const chPct = s.value > 0 ? ((ch.value / s.value) * 100) : 0;
+                                                const chPctLabel = chPct % 1 === 0 ? `${chPct.toFixed(0)}%` : `${chPct.toFixed(1)}%`;
+                                                return (
+                                                    <div key={ci} className="flex justify-between gap-4 tabular-nums">
+                                                        <span>{ch.label}</span>
+                                                        <span className="text-slate-300">{ch.value} ({chPctLabel})</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )
+                                : i === 0
+                                    ? `${s.label}: ${s.value} (topo do funil, refer\u00EAncia 100%)`
+                                    : `${s.label} representa ${pctLabel} do total de ${stages[0].label} (${s.value} de ${stages[0].value})`;
                             return (
                                 <text key={i} x={s.cx} y={isSmall ? cy - s.ry - 10 : cy + 6}
                                       textAnchor="middle"
@@ -232,7 +253,7 @@ export const FunnelChart = ({ data }: FunnelChartProps) => {
                                 transform: 'translate(-50%, -100%)',
                             }}
                         >
-                            {tooltip.text}
+                            {tooltip.content}
                             <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-slate-800" />
                         </div>
                     )}

@@ -1,102 +1,110 @@
-# Project Standards & Architecture (Grafono)
+# Project Standards & Architecture (Defenz Dashboard)
 
 ## Description
-Comprehensive architectural standards, coding conventions, and deployment rules for the Grafono project. Validated against Next.js 16.1.1 and Vercel Serverless environment constraints.
+Comprehensive architectural standards, coding conventions, and deployment rules for the Defenz Dashboard project. Validated against Next.js 16 App Router with no database, webhook-based data flow.
 
 ## Persona
-**Role:** Senior Full-Stack Architect (Next.js/Serverless Specialist)
-**Mindset:** "Zero Hallucination, Serverless-First, Strict Type Safety."
+**Role:** Senior Full-Stack Architect (Next.js / Webhook-Based SPA Specialist)
+**Mindset:** "Zero Hallucination, Security-First, Strict Type Safety."
 
 ## Technical Grounding (The "Brain")
 > *Auto-generated Research Notes:*
-> * **Official Source:** `CLAUDE.md`, `MASTER_ENGINEERING_FRAMEWORK.md`, `package.json`
-> * **Architecture:** Serverless (Vercel) + Neon PostgreSQL (Prisma) + NextAuth v4.
+> * **Official Source:** `CLAUDE.md`, `package.json`
+> * **Architecture:** Single-page dashboard + Login. No database. Data from N8N webhook + Google Sheets.
+> * **Auth:** Custom HMAC-SHA256 signed cookies (no NextAuth, no third-party auth).
 > * **Key Constraints:**
->   *   NO Socket.IO/WebSockets (Serverless limitation).
->   *   NO `prisma migrate` in production pipeline (use `db push`).
->   *   React Strict Mode is DISABLED (`next.config.ts`).
->   *   Server Actions (`use server`) ONLY for DB mutations.
+>   *   NO database, NO ORM, NO Prisma.
+>   *   Data comes exclusively from N8N webhook or Google Sheets at runtime.
+>   *   React 19 with Next.js 16 App Router.
+>   *   All UI text in Brazilian Portuguese (pt-BR).
 
 ## Context & Rules
-*   **Project:** Grafono (SaaS for Speech Therapists).
+*   **Project:** Defenz Dashboard (Sales Intelligence for Cybersecurity).
 *   **Non-Negotiables:**
-    1.  **Database Access:** NEVER instantiate `new PrismaClient()`. ALways import singleton `db` from `@/lib/db`.
-    2.  **Server Actions:** All data mutations must reside in `src/app/actions/*.ts`.
+    1.  **No Database Access:** There is no database. All data comes from the N8N webhook (`/api/dashboard`) or Google Sheets (`/api/dashboard-sheets`).
+    2.  **Authentication:** Custom HMAC-SHA256 token system in `src/lib/auth.ts`. Password-only login, session stored as httpOnly cookie (`defenz_session`).
     3.  **UI Components:**
         *   Primitives: `src/components/ui/*.tsx` (Do NOT modify unless critical).
-        *   Shared: `src/components/*.tsx`.
-        *   Feature-Specific: `src/app/(app)/[route]/_components/*.tsx`.
-    4.  **Authentication:** Routes under `(app)` are protected. API routes for N8N must use `x-api-key`.
-    5.  **Styling:** Tailwind CSS v4. No custom CSS files unless absolute edge case.
+        *   Feature-specific: `src/components/*.tsx` (Dashboard, ErrorBoundary).
+        *   Charts: `src/components/charts/*.tsx` (FunnelChart).
+    4.  **Styling:** Tailwind CSS v4 with "Defenz Lux" theme (white + red). No custom CSS files unless absolute edge case.
+    5.  **Data Validation:** All N8N responses must pass through `validateN8nData()` and `checkConsistency()` in Dashboard.tsx.
 
 ## Workflow / Steps
 
 ### 1. New Feature Implementation
-1.  **Plan:** Check `schema.prisma`. required changes? -> `npm run db:push`.
-2.  **Backend:** Create/Update Server Action in `src/app/actions/`.
-    *   *Rule:* Always handle `try/catch` and return `{ success: boolean, error?: string }`.
-3.  **Frontend:** Create Client Component in `_components/`.
-    *   *Rule:* Use `useTransition` for Server Action calls to manage loading states.
+1.  **Plan:** Check `CLAUDE.md` for architecture. Understand the single-page dashboard structure.
+2.  **API Route:** If needed, create/update route in `src/app/api/`. Must verify session, rate-limit, and validate input.
+    *   *Rule:* Always handle `try/catch` and return appropriate HTTP status codes.
+3.  **Frontend:** Update `Dashboard.tsx` or create new component in `src/components/`.
+    *   *Rule:* Use Framer Motion for animations. Use `MagicCard` for card containers.
 
-### 2. Database Changes
-1.  Modify `prisma/schema.prisma`.
-2.  Run `npm run db:push` (Local).
-3.  Run `npm run db:generate`.
-4.  **Never** commit migration files (`migrations/` folder is ignored/unused in this `db push` workflow).
+### 2. API Route Changes
+1.  Ensure session verification via `verifySession()`.
+2.  Apply rate limiting (30 req/min per IP).
+3.  Validate all input (dates: YYYY-MM-DD, max 366-day range).
+4.  Set 15s timeout on upstream calls.
 
-### 3. Deployment (Vercel)
-*   **Trigger:** Push to `main`.
-*   **Build Command:** `npx prisma db push --accept-data-loss && npx prisma generate && next build`.
-*   **Env Vars:** Must be set in Vercel Dashboard (Neon connection string).
+### 3. Deployment
+*   **Build Command:** `npm run build` (Next.js production build).
+*   **Env Vars:** `AUTH_SECRET`, `DASHBOARD_PASSWORD`, `N8N_WEBHOOK_URL` must be set.
 
 ## Templates / Examples
 
-### Server Action Pattern
+### API Route Pattern
 ```typescript
-"use server";
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession } from "@/lib/auth";
 
-import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+export async function POST(request: NextRequest) {
+    // 1. Auth Check
+    const session = await verifySession(request);
+    if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-export async function createItem(data: ItemSchema) {
+    // 2. Input Validation
+    const body = await request.json();
+    // Validate dates, ranges, etc.
+
+    // 3. Upstream Call with Timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     try {
-        // 1. Validation (Zod preferred)
-        // 2. DB Operation
-        const item = await db.item.create({ data });
-        
-        // 3. Revalidation
-        revalidatePath("/items");
-        
-        return { success: true, data: item };
+        const response = await fetch(process.env.N8N_WEBHOOK_URL!, {
+            method: "POST",
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        const data = await response.json();
+        return NextResponse.json(data);
     } catch (error) {
-        console.error("Action Error:", error);
-        return { success: false, error: "Detailed error message" };
+        clearTimeout(timeout);
+        return NextResponse.json({ error: "Upstream error" }, { status: 502 });
     }
 }
 ```
 
-### Component Structure
+### Component Pattern
 ```tsx
 "use client";
 
-import { useState, useTransition } from "react";
-import { createItem } from "@/app/actions/item";
-import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { MagicCard } from "@/components/ui/MagicCard";
 
-export function CreateItemForm() {
-    const [isPending, startTransition] = useTransition();
-
-    const onSubmit = (formData: FormData) => {
-        startTransition(async () => {
-             const res = await createItem(formData);
-             if (!res.success) toast.error(res.error);
-        });
-    };
-
+export function MetricCard({ label, value }: { label: string; value: string }) {
     return (
-        <form action={onSubmit}>
-            <Button disabled={isPending}>Save</Button>
-        </form>
+        <MagicCard>
+            <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+            >
+                <p className="text-sm text-muted-foreground">{label}</p>
+                <p className="text-2xl font-bold font-outfit">{value}</p>
+            </motion.div>
+        </MagicCard>
     );
 }
 ```

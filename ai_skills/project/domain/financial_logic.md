@@ -1,68 +1,70 @@
-# Financial Logic & KPI Protocols
+# Sales Pipeline & KPI Protocols
 
 ## Description
-Core business logic for calculating clinical financial health. These rules define "Truth" for the Finance Dashboard.
+Core business logic for calculating commercial metrics and sales pipeline health. These rules define "Truth" for the Defenz Sales Intelligence Dashboard.
 
 ## Persona
-**Role:** CFO / Clinical Auditor
+**Role:** Sales Operations Analyst / Revenue Analyst
 **Mindset:** "Numbers tell the story, but only if the formula is right."
-**Mantra:** "Receita Real is what hit the bank. Everything else is fantasy."
+**Mantra:** "Valor Fechado is what hit the contract. Everything else is pipeline."
 
 ## Technical Grounding
 > *Auto-generated Research Notes:*
-> * **Metric:** Net Profit (Lucro Real). **Formula:** (Paid Incomes) - (Paid Expenses).
-> * **Metric:** Occupancy (Ocupação). **Window:** "This Week" (Mon-Sun) vs "This Month" (1st to 1st). **Formula:** (Hours Sold) / (Hours Available).
-> * **Metric:** Avg Ticket (Ticket Médio). **Formula:** (Total Invoiced Revenue) / (Total Appointments Realized).
-> * **Metric:** Forecast (Previsão). **Scope:** Current Month (Remaining).
+> * **Metric:** Valor Pipeline. **Formula:** Sum of all active deal values (`valor_pipeline`).
+> * **Metric:** Valor Fechado. **Formula:** Sum of all closed deal values (`valor_fechado`).
+> * **Metric:** Taxa de Conectividade. **Formula:** `(ligacoes_atendidas / ligacoes) * 100`.
+> * **Metric:** Conversion Funnel. **Flow:** Ligacoes -> Emails -> Reunioes -> Apresentacoes -> Propostas -> Deals Novos -> Deals Fechados.
 
 ## Context & Rules
-*   **Project:** Grafono Dashboard.
+*   **Project:** Defenz Dashboard.
 *   **Non-Negotiables:**
-    1.  **"Lucro Real" Definition:** Rename UI to **"Resultado Caixa"** or "Recebido Líquido". It strictly equals `SUM(Transaction WHERE status='PAID' AND flow='INCOME') - SUM(Transaction WHERE status='PAID' AND flow='EXPENSE')`.
+    1.  **Currency Format:** Always BRL via `Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })`.
     2.  **Date Boundaries:**
-        *   **Month:** 1st 00:00:00 to Last Day 23:59:59.
-        *   **Week:** Monday 00:00:00 to Sunday 23:59:59.
-    3.  **Ticket Integrity:** Do NOT divide by "Scheduled" appointments. Only "Realized" (Realizado) count for actual ticket.
-    4.  **Forecast:** Only include PENDING items due within the current month boundary.
+        *   **Hoje:** Current day only.
+        *   **7/15/30 Dias:** Rolling window from today.
+        *   **Este Mes:** 1st of current month to today.
+    3.  **Funnel Integrity:** Each stage must be <= the previous stage. If `deals_fechados > deals_novos`, flag as inconsistency.
+    4.  **Data Consistency:** Use `checkConsistency()` to validate that `deals_fechados` count matches `clientes_fechados` array length.
 
 ## Formulas
 
-### 1. Lucro Real (Cash Flow Result)
+### 1. Taxa de Conectividade (Connection Rate)
 ```typescript
-const income = await db.transaction.aggregate({
-    _sum: { amount: true },
-    where: { 
-        status: { in: ['PAID', 'PAGO', 'pago'] },
-        flow: 'INCOME',
-        paymentDate: { gte: startOfMonth, lte: endOfMonth }
-    }
-});
-const expense = await db.transaction.aggregate({
-    _sum: { amount: true },
-    where: { 
-        status: { in: ['PAID', 'PAGO', 'pago'] }, // Paid expenses only? Usually yes for Cash Flow.
-        flow: 'EXPENSE',
-        paymentDate: { gte: startOfMonth, lte: endOfMonth }
-    }
-});
-return (income._sum.amount || 0) - (expense._sum.amount || 0);
+const taxa = (ligacoes_atendidas / ligacoes) * 100;
+// Display as percentage with 1 decimal: "67.5%"
 ```
 
-### 2. Occupancy Rate (Taxa de Ocupação)
-*   **Capacity:** Sum of all available slots in the period (Week or Month).
-*   **Occupied:** Count of appointments causing a "busy" status in that period.
-*   **Formula:** `(Occupied Hours / Capacity Hours) * 100`.
-
-### 3. Average Ticket (Ticket Médio)
-*   User specified: "Dividing number of appointments... by total value patient will pay".
-*   Wait, standard is Value / Count. User wrote: *"...dividindo o número de atendimentos... pelo valor total"*.
-*   *Correction Reference:* `Count / Value` = "Appointments per Real". This is inverted.
-*   *Assumption:* User meant standard Ticket: `Total Value / Total Appointments`.
-*   *Refined Formula:* `(Total Revenue Realized) / (Count of 'Realized' Appointments)`.
-
-### 4. Forecast (Previsão)
+### 2. Pipeline Value
 ```typescript
-const generatedPending = SUM(Transactions WHERE status='PENDING' AND dueDate in Month);
-const potentialAppointments = SUM(Appointments WHERE status='Agendado' AND date in Month AND Patient != Monthly);
-return generatedPending + potentialAppointments;
+// Sum of all active deal values from N8N data
+const pipeline = data.valor_pipeline;
+// Format: R$ 1.234.567,89
+```
+
+### 3. Conversion Rate (Stage to Stage)
+```typescript
+// Example: Emails to Reunioes conversion
+const conversionRate = (reunioes / emails) * 100;
+```
+
+### 4. Sales Funnel Stages
+```typescript
+// The funnel follows this order (each stage <= previous):
+const funnel = [
+    { label: "Ligacoes", value: data.ligacoes },
+    { label: "Emails", value: data.emails },
+    { label: "Reunioes", value: data.reunioes },
+    { label: "Apresentacoes", value: data.apresentacoes },
+    { label: "Propostas", value: data.propostas },
+    { label: "Deals Novos", value: data.deals_novos },
+    { label: "Deals Fechados", value: data.deals_fechados },
+];
+```
+
+### 5. Data Source Priority
+```typescript
+// 1. sessionStorage cache (30 min TTL)
+// 2. Google Sheets (/api/dashboard-sheets)
+// 3. N8N webhook (/api/dashboard)
+// 4. Mock data (generateMockData())
 ```
