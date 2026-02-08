@@ -51,24 +51,22 @@ export function useDashboardData(dateRange: string) {
       let parsed: any = null;
       let source: DataSource = 'n8n';
 
-      // Sheets API only has pre-computed periods (today, 7d, 15d, 30d, month)
-      // Custom date ranges must go directly to N8N webhook
-      if (!range.startsWith('custom:')) {
-        try {
-          const sheetsResponse = await fetch(`/api/dashboard-sheets?periodo=${range}`, {
-            signal: controller.signal,
-          });
+      // Try Sheets API first (supports presets and custom ranges)
+      try {
+        const sheetsResponse = await fetch(
+          `/api/dashboard-sheets?periodo=${encodeURIComponent(range)}`,
+          { signal: controller.signal }
+        );
 
-          if (sheetsResponse.ok) {
-            const sheetsData = await sheetsResponse.json();
-            if (sheetsData && !sheetsData.error) {
-              parsed = sheetsData;
-              source = 'sheets';
-            }
+        if (sheetsResponse.ok) {
+          const sheetsData = await sheetsResponse.json();
+          if (sheetsData && !sheetsData.error) {
+            parsed = sheetsData;
+            source = 'sheets';
           }
-        } catch {
-          // Sheets failed, try N8N
         }
+      } catch {
+        // Sheets failed, try N8N
       }
 
       if (!parsed) {

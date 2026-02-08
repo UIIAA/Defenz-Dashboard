@@ -1,7 +1,8 @@
 "use client";
 
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Info } from 'lucide-react';
 import { MagicCard } from '@/components/ui/MagicCard';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 
@@ -13,13 +14,21 @@ interface StatCardProps {
   highlight?: boolean;
   loading?: boolean;
   trend?: 'up' | 'down';
+  tooltip?: string;
 }
 
-export const StatCard = ({ icon: Icon, title, value, subtext, highlight, loading, trend }: StatCardProps) => (
+export const StatCard = ({ icon: Icon, title, value, subtext, highlight, loading, trend, tooltip }: StatCardProps) => (
   <MagicCard className="h-full flex flex-col justify-between border-slate-200/60 bg-white/60 hover:border-red-500/30 hover:shadow-red-500/5 transition-all duration-500">
     <div className="flex justify-between items-start mb-4">
       <div>
-        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest font-display">{title}</p>
+        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest font-display flex items-center gap-1.5">
+          {title}
+          {tooltip && (
+            <Tooltip content={tooltip}>
+              <Info size={12} className="text-slate-300 hover:text-slate-500 transition-colors cursor-help" />
+            </Tooltip>
+          )}
+        </p>
         {loading ? (
           <div className="h-8 w-24 bg-slate-200 rounded mt-1 animate-pulse"></div>
         ) : (

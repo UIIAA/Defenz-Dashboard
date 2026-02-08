@@ -1,12 +1,54 @@
 "use client";
 
 import { motion } from 'framer-motion';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { Deal } from '@/lib/types';
-import { formatCurrency, originBadge } from '@/lib/formatters';
+import { formatCurrency, originBadge, normalizeDate } from '@/lib/formatters';
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  call: 'Ligacao',
+  email: 'Email',
+  meeting: 'Reuniao',
+};
+
+function formatDateBR(dateStr: string | undefined): string {
+  const normalized = normalizeDate(dateStr);
+  if (!normalized) return '';
+  const [y, m, d] = normalized.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function buildTooltipContent(deal: Deal, type: 'active' | 'closed'): string | null {
+  const lines: string[] = [];
+
+  if (type === 'closed') {
+    const closedDate = formatDateBR(deal.data);
+    if (closedDate) lines.push(`Fechado em ${closedDate}`);
+  } else if (deal.stage) {
+    if (deal.days_in_stage != null) {
+      lines.push(`${deal.stage} ha ${deal.days_in_stage} dia${deal.days_in_stage !== 1 ? 's' : ''}`);
+    } else {
+      lines.push(`Stage: ${deal.stage}`);
+    }
+  }
+
+  const modDate = formatDateBR(deal.modified_time);
+  if (modDate) lines.push(`Atualizado: ${modDate}`);
+
+  if (deal.last_activity_type && deal.last_activity_type !== 'none' && deal.last_activity_date) {
+    const label = ACTIVITY_LABELS[deal.last_activity_type] || deal.last_activity_type;
+    const actDate = formatDateBR(deal.last_activity_date);
+    if (actDate) lines.push(`Ultima atividade: ${label} em ${actDate}`);
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null;
+}
 
 export const DealRow = ({ deal, type }: { deal: Deal; type: 'active' | 'closed' }) => {
   const badge = originBadge(deal.categoria);
-  return (
+  const tooltipText = buildTooltipContent(deal, type);
+
+  const row = (
     <motion.div
       initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
@@ -40,5 +82,13 @@ export const DealRow = ({ deal, type }: { deal: Deal; type: 'active' | 'closed' 
         )}
       </div>
     </motion.div>
+  );
+
+  if (!tooltipText) return row;
+
+  return (
+    <Tooltip content={<span className="whitespace-pre-line">{tooltipText}</span>}>
+      {row}
+    </Tooltip>
   );
 };

@@ -122,6 +122,7 @@ export const ExecutiveDashboard = () => {
             value={data ? formatCurrency(data.comissao_pipeline) : "-"}
             subtext={`${filteredDealsAtivos.length} deals ativos — Pipeline: ${data ? formatCurrency(data.valor_pipeline) : '-'}`}
             highlight={true}
+            tooltip="Soma das comissoes de todos os deals ativos. Taxas: Direto 58%, Parceiro 43%, SecuriSoft 5%."
           />
           <StatCard
             loading={loading}
@@ -130,6 +131,7 @@ export const ExecutiveDashboard = () => {
             value={data ? formatCurrency(data.comissao_fechado) : "-"}
             subtext={`${data?.deals_fechados || 0} negocios ganhos — Total: ${data ? formatCurrency(data.valor_fechado) : '-'}`}
             highlight={true}
+            tooltip="Soma das comissoes dos deals fechados no periodo selecionado."
           />
           <StatCard
             loading={loading}
@@ -141,6 +143,7 @@ export const ExecutiveDashboard = () => {
                 ? 'Sem fechamentos no periodo'
                 : `${data.deals_fechados} ganhos de ${data.deals_fechados + Math.round(data.deals_fechados * (100 - (data.win_rate || 0)) / Math.max(data.win_rate || 1, 1))} total`
             }
+            tooltip="Percentual de deals ganhos sobre o total de finalizados (ganhos + perdidos)."
           />
           <StatCard
             loading={loading}
@@ -148,6 +151,7 @@ export const ExecutiveDashboard = () => {
             title="Ticket Medio"
             value={data ? formatCurrency(data.ticket_medio) : "-"}
             subtext="Valor medio por deal"
+            tooltip="Valor medio por deal fechado no periodo (valor total / quantidade)."
           />
           <StatCard
             loading={loading}
@@ -155,6 +159,7 @@ export const ExecutiveDashboard = () => {
             title="Taxa Conectividade"
             value={data ? `${data.taxa_conectividade}%` : "-"}
             subtext={`${data?.ligacoes_atendidas || 0} de ${data?.ligacoes || 0} ligacoes`}
+            tooltip="Percentual de ligacoes atendidas sobre o total de ligacoes realizadas."
           />
           <StatCard
             loading={loading}
@@ -163,6 +168,7 @@ export const ExecutiveDashboard = () => {
             value={data?.ultimo_cliente.valor ? formatCurrency(data.ultimo_cliente.valor) : "-"}
             subtext={data?.ultimo_cliente.nome || "Nenhum recente"}
             highlight={true}
+            tooltip="Valor do deal mais recente fechado como ganho no periodo."
           />
         </div>
 

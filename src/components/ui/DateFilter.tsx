@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { CalendarDays } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { DateRange } from 'react-day-picker';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -27,14 +27,52 @@ const RANGES = [
 export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilterProps) => {
     const [open, setOpen] = useState(false);
     const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+    const selectionPhaseRef = useRef<'idle' | 'from_selected'>('idle');
 
     const isCustom = currentRange.startsWith('custom:');
+
+    const handleDayClick = (day: Date) => {
+        const today = startOfDay(new Date());
+        const clicked = startOfDay(day);
+
+        if (selectionPhaseRef.current === 'idle') {
+            // First click → from = clicked, to = today
+            setDateRange({
+                from: clicked,
+                to: clicked <= today ? today : clicked,
+            });
+            selectionPhaseRef.current = 'from_selected';
+        } else {
+            // Second click
+            const from = dateRange?.from ? startOfDay(dateRange.from) : null;
+
+            if (from && clicked.getTime() === from.getTime()) {
+                // Same date → single day
+                setDateRange({ from: clicked, to: clicked });
+            } else if (from) {
+                // Different date → set range (sort from/to)
+                if (clicked < from) {
+                    setDateRange({ from: clicked, to: from });
+                } else {
+                    setDateRange({ from, to: clicked });
+                }
+            }
+            selectionPhaseRef.current = 'idle';
+        }
+    };
+
+    const handlePopoverChange = (isOpen: boolean) => {
+        setOpen(isOpen);
+        if (isOpen) {
+            selectionPhaseRef.current = 'idle';
+            setDateRange(undefined);
+        }
+    };
 
     const handleApply = () => {
         if (dateRange?.from) {
             const from = dateRange.from;
             const to = dateRange.to ?? from;
-            // Validate: from must be <= to, max 366 days range
             if (from > to) return;
             const diffMs = to.getTime() - from.getTime();
             const diffDays = diffMs / (1000 * 60 * 60 * 24);
@@ -43,11 +81,13 @@ export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilter
             const toStr = format(to, 'yyyy-MM-dd');
             onRangeChange(`custom:${fromStr}:${toStr}`);
             setOpen(false);
+            selectionPhaseRef.current = 'idle';
         }
     };
 
     const handlePresetClick = (rangeId: string) => {
         setDateRange(undefined);
+        selectionPhaseRef.current = 'idle';
         onRangeChange(rangeId);
     };
 
@@ -62,7 +102,7 @@ export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilter
 
     return (
         <div className="flex items-center bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-full p-1 shadow-sm">
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover open={open} onOpenChange={handlePopoverChange}>
                 <PopoverTrigger asChild>
                     <button
                         disabled={disabled}
@@ -82,7 +122,8 @@ export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilter
                     <Calendar
                         mode="range"
                         selected={dateRange}
-                        onSelect={setDateRange}
+                        onSelect={() => {}}
+                        onDayClick={handleDayClick}
                         numberOfMonths={1}
                         locale={ptBR}
                     />

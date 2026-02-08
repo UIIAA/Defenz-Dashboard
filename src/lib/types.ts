@@ -16,6 +16,10 @@ export interface Deal {
   valor?: number;
   categoria?: string;
   comissao_valor?: number;
+  modified_time?: string;
+  days_in_stage?: number;
+  last_activity_date?: string;
+  last_activity_type?: string;
 }
 
 export interface Partners {
