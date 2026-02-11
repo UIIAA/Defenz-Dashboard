@@ -50,7 +50,23 @@ export interface N8nData {
   parceiros: Partners;
   deals_ativos: Deal[];
   clientes_fechados: Deal[];
+  _comparison?: ComparisonData;
 }
+
+export interface ComparisonData {
+  periodo: string;
+  dias: number;
+  comissao_fechado: number;
+  deals_fechados: number;
+  ligacoes: number;
+  emails: number;
+  reunioes: number;
+  taxa_conectividade: number;
+  win_rate: number;
+  ticket_medio: number;
+}
+
+export type TrendDirection = 'up' | 'down' | 'neutral';
 
 export type DataSource = 'cache' | 'sheets' | 'n8n' | 'mock';
 
@@ -71,4 +87,12 @@ export interface DealActivity {
   data: string;
   descricao: string;
   vendedor: string;
+}
+
+export interface DailyEffort {
+  data: string;
+  calls: number;
+  emails: number;
+  meetings: number;
+  total: number;
 }

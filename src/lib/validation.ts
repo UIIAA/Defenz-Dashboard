@@ -44,6 +44,20 @@ export const validateN8nData = (raw: any): N8nData => {
     clientes_fechados: Array.isArray(raw.clientes_fechados)
       ? raw.clientes_fechados.slice(0, 500)
       : [],
+    ...(raw._comparison && typeof raw._comparison === 'object'
+      ? { _comparison: {
+          periodo: String(raw._comparison.periodo || ''),
+          dias: num(raw._comparison.dias),
+          comissao_fechado: num(raw._comparison.comissao_fechado),
+          deals_fechados: num(raw._comparison.deals_fechados),
+          ligacoes: num(raw._comparison.ligacoes),
+          emails: num(raw._comparison.emails),
+          reunioes: num(raw._comparison.reunioes),
+          taxa_conectividade: num(raw._comparison.taxa_conectividade),
+          win_rate: num(raw._comparison.win_rate),
+          ticket_medio: num(raw._comparison.ticket_medio),
+        }}
+      : {}),
   };
 };
 

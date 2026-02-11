@@ -70,9 +70,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [dealsAtivos, atividades] = await Promise.all([
+    const [dealsAtivos, atividades, eforcoDiario] = await Promise.all([
       fetchFromSheets("deals_ativos"),
-      fetchFromSheets("atividades")
+      fetchFromSheets("atividades"),
+      fetchFromSheets("esforco_diario")
     ]);
 
     // Index activities by deal_id
@@ -127,12 +128,22 @@ export async function GET(request: NextRequest) {
       ? Math.round(enrichedDeals.reduce((s: number, d: any) => s + (Number(d.days_in_stage) || 0), 0) / enrichedDeals.length)
       : 0;
 
+    // Parse esforco_diario rows
+    const dailyEffort = eforcoDiario.map((row: any) => ({
+      data: String(row.data || ''),
+      calls: Number(row.calls) || 0,
+      emails: Number(row.emails) || 0,
+      meetings: Number(row.meetings) || 0,
+      total: Number(row.total) || 0,
+    })).filter((r: any) => r.data).sort((a: any, b: any) => a.data.localeCompare(b.data));
+
     const response = {
       deals: enrichedDeals,
       staleCount: staleDeals.length,
       totalDeals: enrichedDeals.length,
       totalPipeline,
       avgDaysInStage,
+      esforco_diario: dailyEffort,
       _source: "google_sheets"
     };
 

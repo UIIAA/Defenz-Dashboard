@@ -94,6 +94,28 @@ function mapPeriodo(range: string): PeriodoResult {
   return { custom: false, key: "hoje" };
 }
 
+// Período de referência para comparação temporal
+function getReferencePeriod(key: string): string | null {
+  const map: Record<string, string> = {
+    hoje: "7d",
+    "7d": "30d",
+    "15d": "30d",
+    "30d": "mes",
+  };
+  return map[key] ?? null;
+}
+
+function getDaysInPeriod(key: string): number {
+  const map: Record<string, number> = {
+    hoje: 1,
+    "7d": 7,
+    "15d": 15,
+    "30d": 30,
+    mes: 30,
+  };
+  return map[key] ?? 30;
+}
+
 export async function GET(request: NextRequest) {
   // Verificar sessão
   const session = await verifySession(request);
@@ -199,8 +221,34 @@ export async function GET(request: NextRequest) {
       periodoLabel = `${fmtDate(dataInicio)} - ${fmtDate(dataFim)}`;
     }
 
+    // Buscar período de referência para comparação temporal
+    let comparison: any = undefined;
+    const refKey = getReferencePeriod(periodoResult.key);
+    if (refKey && !periodoResult.custom) {
+      const refRow = metricas
+        .filter((row: any) => row.periodo === refKey)
+        .sort((a: any, b: any) =>
+          new Date(b.data_coleta).getTime() - new Date(a.data_coleta).getTime()
+        )[0];
+
+      if (refRow) {
+        comparison = {
+          periodo: refKey,
+          dias: getDaysInPeriod(refKey),
+          comissao_fechado: Number(refRow.comissao_fechado) || 0,
+          deals_fechados: Number(refRow.deals_fechados) || 0,
+          ligacoes: Number(refRow.ligacoes) || 0,
+          emails: Number(refRow.emails) || 0,
+          reunioes: Number(refRow.reunioes) || 0,
+          taxa_conectividade: Number(refRow.taxa_conectividade) || 0,
+          win_rate: Number(refRow.win_rate) || 0,
+          ticket_medio: Number(refRow.ticket_medio) || 0,
+        };
+      }
+    }
+
     // Montar resposta no formato esperado pelo Dashboard
-    const response = {
+    const response: any = {
       data: metrica.data_coleta,
       hora: new Date().toLocaleTimeString("pt-BR"),
       periodo: periodoLabel,
@@ -226,8 +274,12 @@ export async function GET(request: NextRequest) {
       },
       deals_ativos: dealsAtivos || [],
       clientes_fechados: clientesFechados || [],
-      _source: "google_sheets"
+      _source: "google_sheets",
     };
+
+    if (comparison) {
+      response._comparison = comparison;
+    }
 
     // Salvar no cache
     memoryCache.set(cacheKey, {

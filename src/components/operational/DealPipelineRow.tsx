@@ -18,9 +18,10 @@ const activityIcon: Record<string, typeof Phone> = {
 interface DealPipelineRowProps {
   deal: OperationalDeal;
   index: number;
+  compact?: boolean;
 }
 
-export const DealPipelineRow = ({ deal, index }: DealPipelineRowProps) => {
+export const DealPipelineRow = ({ deal, index, compact }: DealPipelineRowProps) => {
   const [expanded, setExpanded] = useState(false);
   const badge = originBadge(deal.categoria);
   const LastIcon = activityIcon[deal.last_activity_type] || AlertCircle;
@@ -36,6 +37,38 @@ export const DealPipelineRow = ({ deal, index }: DealPipelineRowProps) => {
         return `${tipo} ${days}d atras`.trim();
       })()
     : 'sem atividade';
+
+  if (compact) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.03 }}
+        className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/60"
+      >
+        <DealAgingBadge days={deal.days_in_stage} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-800 truncate">{deal.nome}</span>
+            {badge && (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${badge.className}`}>
+                {badge.label}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+            <span>{deal.stage}</span>
+            <span>·</span>
+            <span>{formatCurrency(deal.comissao_valor || 0)}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <LastIcon size={12} className="text-slate-400" />
+          <span className="text-[11px] text-slate-400 capitalize">{lastActivityLabel}</span>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import type { OperationalDeal } from '@/lib/types';
+import type { OperationalDeal, DailyEffort } from '@/lib/types';
 
 interface OperationalData {
   deals: OperationalDeal[];
@@ -9,6 +9,7 @@ interface OperationalData {
   totalDeals: number;
   totalPipeline: number;
   avgDaysInStage: number;
+  esforco_diario: DailyEffort[];
 }
 
 const REFRESH_INTERVAL_MS = 5_000;
@@ -77,6 +78,13 @@ export function useOperationalData() {
         totalDeals: Number(result.totalDeals) || 0,
         totalPipeline: Number(result.totalPipeline) || 0,
         avgDaysInStage: Number(result.avgDaysInStage) || 0,
+        esforco_diario: (result.esforco_diario || []).map((r: any) => ({
+          data: String(r.data || ''),
+          calls: Number(r.calls) || 0,
+          emails: Number(r.emails) || 0,
+          meetings: Number(r.meetings) || 0,
+          total: Number(r.total) || 0,
+        })),
       };
 
       setData(operationalData);

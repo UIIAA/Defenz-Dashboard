@@ -11,9 +11,12 @@ import { DealsTable } from '@/components/dashboard/DealsTable';
 import { PartnersCard } from '@/components/dashboard/PartnersCard';
 import { LastClientCard } from '@/components/dashboard/LastClientCard';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { MagicCard } from '@/components/ui/MagicCard';
+import { DailyEffortChart } from '@/components/operational/charts/DailyEffortChart';
 import { useDashboardData } from '@/hooks/useDashboardData';
+import { useEsforcoDiario } from '@/hooks/useEsforcoDiario';
 import { useDateRange } from '@/providers/DateRangeProvider';
-import { formatCurrency } from '@/lib/formatters';
+import { formatCurrency, getDateBounds } from '@/lib/formatters';
 import type { DataSource } from '@/lib/types';
 
 const DataSourceBadge = ({ source }: { source: DataSource }) => (
@@ -40,8 +43,34 @@ export const ExecutiveDashboard = () => {
     funnelData,
     filteredDealsAtivos,
     filteredClientesFechados,
+    trends,
+    comparisonLabel,
+    comparisonDeltas,
+    comparisonValues,
     fetchData,
   } = useDashboardData(dateRange);
+
+  const { data: efpiData, loading: efpiLoading } = useEsforcoDiario();
+  const dateBounds = getDateBounds(dateRange);
+
+  const hasComparison = comparisonLabel !== '';
+
+  const buildComparisonLine = (
+    key: string,
+    format: 'currency' | 'percent' | 'number',
+    abbreviated = false,
+  ): string | undefined => {
+    if (!hasComparison || comparisonValues[key] === undefined) return undefined;
+    const val = comparisonValues[key];
+    const formatted =
+      format === 'currency' ? formatCurrency(val) :
+      format === 'percent' ? `${val}%` :
+      String(val);
+    const prefix = abbreviated ? `Ant. ${comparisonLabel}` : `Anterior (${comparisonLabel})`;
+    const delta = comparisonDeltas[key];
+    const suffix = delta && delta !== '0%' ? ` · ${delta}` : '';
+    return `${prefix}: ${formatted}${suffix}`;
+  };
 
   if (error) {
     return <ErrorState error={error} onRetry={() => fetchData(dateRange)} />;
@@ -113,17 +142,8 @@ export const ExecutiveDashboard = () => {
           </div>
         </div>
 
-        {/* Executive Stats Grid - 6 cards, 2 rows of 3 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <StatCard
-            loading={loading}
-            icon={DollarSign}
-            title="Comissao Pipeline"
-            value={data ? formatCurrency(data.comissao_pipeline) : "-"}
-            subtext={`${filteredDealsAtivos.length} deals ativos — Pipeline: ${data ? formatCurrency(data.valor_pipeline) : '-'}`}
-            highlight={true}
-            tooltip="Soma das comissoes de todos os deals ativos. Taxas: Direto 58%, Parceiro 43%, SecuriSoft 5%."
-          />
+        {/* Hero Card: Comissão Ganha */}
+        <div>
           <StatCard
             loading={loading}
             icon={Trophy}
@@ -131,7 +151,23 @@ export const ExecutiveDashboard = () => {
             value={data ? formatCurrency(data.comissao_fechado) : "-"}
             subtext={`${data?.deals_fechados || 0} negocios ganhos — Total: ${data ? formatCurrency(data.valor_fechado) : '-'}`}
             highlight={true}
+            heroSize={true}
+            trend={hasComparison ? trends.comissao_fechado as 'up' | 'down' | undefined : undefined}
+            comparisonLine={buildComparisonLine('comissao_fechado', 'currency')}
             tooltip="Soma das comissoes dos deals fechados no periodo selecionado."
+          />
+        </div>
+
+        {/* Support Cards: 5 cards in a row */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard
+            loading={loading}
+            icon={DollarSign}
+            title="Pipeline"
+            value={data ? formatCurrency(data.comissao_pipeline) : "-"}
+            subtext={`${filteredDealsAtivos.length} deals — ${data ? formatCurrency(data.valor_pipeline) : '-'}`}
+            highlight={true}
+            tooltip="Soma das comissoes de todos os deals ativos. Taxas: Direto 58%, Parceiro 43%, SecuriSoft 5%."
           />
           <StatCard
             loading={loading}
@@ -140,9 +176,11 @@ export const ExecutiveDashboard = () => {
             value={data ? `${data.win_rate}%` : "-"}
             subtext={
               !data?.deals_fechados
-                ? 'Sem fechamentos no periodo'
+                ? 'Sem fechamentos'
                 : `${data.deals_fechados} ganhos de ${data.deals_fechados + Math.round(data.deals_fechados * (100 - (data.win_rate || 0)) / Math.max(data.win_rate || 1, 1))} total`
             }
+            trend={hasComparison ? trends.win_rate as 'up' | 'down' | undefined : undefined}
+            comparisonLine={buildComparisonLine('win_rate', 'percent', true)}
             tooltip="Percentual de deals ganhos sobre o total de finalizados (ganhos + perdidos)."
           />
           <StatCard
@@ -151,14 +189,18 @@ export const ExecutiveDashboard = () => {
             title="Ticket Medio"
             value={data ? formatCurrency(data.ticket_medio) : "-"}
             subtext="Valor medio por deal"
+            trend={hasComparison ? trends.ticket_medio as 'up' | 'down' | undefined : undefined}
+            comparisonLine={buildComparisonLine('ticket_medio', 'currency', true)}
             tooltip="Valor medio por deal fechado no periodo (valor total / quantidade)."
           />
           <StatCard
             loading={loading}
             icon={Zap}
-            title="Taxa Conectividade"
+            title="Conectividade"
             value={data ? `${data.taxa_conectividade}%` : "-"}
             subtext={`${data?.ligacoes_atendidas || 0} de ${data?.ligacoes || 0} ligacoes`}
+            trend={hasComparison ? trends.taxa_conectividade as 'up' | 'down' | undefined : undefined}
+            comparisonLine={buildComparisonLine('taxa_conectividade', 'percent', true)}
             tooltip="Percentual de ligacoes atendidas sobre o total de ligacoes realizadas."
           />
           <StatCard
@@ -184,6 +226,28 @@ export const ExecutiveDashboard = () => {
             <LastClientCard client={data?.ultimo_cliente} loading={loading} />
           </div>
         </div>
+
+        {/* Daily Effort Chart */}
+        <MagicCard className="border-slate-200/60 bg-white/60 overflow-hidden">
+          <div className="px-4 pt-4 pb-1">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 font-display">
+              Esforco por Dia
+            </p>
+          </div>
+          <div className="px-4 pb-4">
+            {efpiLoading ? (
+              <div className="h-[260px] bg-slate-50 rounded-xl animate-pulse" />
+            ) : (
+              <div className="h-[260px]">
+                <DailyEffortChart
+                  efpiData={efpiData}
+                  dataInicio={dateBounds.data_inicio}
+                  dataFim={dateBounds.data_fim}
+                />
+              </div>
+            )}
+          </div>
+        </MagicCard>
 
         {/* Data Tables Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,13 +1,102 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import type { N8nData, DataSource } from '@/lib/types';
+import type { N8nData, DataSource, TrendDirection, ComparisonData } from '@/lib/types';
 import { validateN8nData, checkConsistency } from '@/lib/validation';
 import { getCachedData, setCachedData } from '@/lib/cache';
 import { generateMockData } from '@/lib/mock-data';
 import { normalizeDate, getDateBounds } from '@/lib/formatters';
 
 const REFRESH_INTERVAL_MS = 5_000;
+
+const DAYS_MAP: Record<string, number> = {
+  today: 1, '7d': 7, '15d': 15, '30d': 30, month: 30,
+};
+
+const REF_LABEL_MAP: Record<string, string> = {
+  '7d': 'media 7d',
+  '30d': 'media 30d',
+  mes: 'mes atual',
+};
+
+function computeTrends(
+  data: N8nData,
+  dateRange: string,
+): {
+  trends: Record<string, TrendDirection>;
+  comparisonLabel: string;
+  comparisonDeltas: Record<string, string>;
+  comparisonValues: Record<string, number>;
+} {
+  const empty = { trends: {}, comparisonLabel: '', comparisonDeltas: {}, comparisonValues: {} };
+  const comp = data._comparison;
+  if (!comp) return empty;
+
+  const currentDays = DAYS_MAP[dateRange] ?? 30;
+  const refDays = comp.dias || 30;
+  const label = REF_LABEL_MAP[comp.periodo] || comp.periodo;
+
+  const fields: { key: string; currentVal: number; refVal: number; isRate?: boolean }[] = [
+    { key: 'comissao_fechado', currentVal: data.comissao_fechado, refVal: comp.comissao_fechado },
+    { key: 'deals_fechados', currentVal: data.deals_fechados, refVal: comp.deals_fechados },
+    { key: 'ligacoes', currentVal: data.ligacoes, refVal: comp.ligacoes },
+    { key: 'emails', currentVal: data.emails, refVal: comp.emails },
+    { key: 'reunioes', currentVal: data.reunioes, refVal: comp.reunioes },
+    { key: 'taxa_conectividade', currentVal: data.taxa_conectividade, refVal: comp.taxa_conectividade, isRate: true },
+    { key: 'win_rate', currentVal: data.win_rate, refVal: comp.win_rate, isRate: true },
+    { key: 'ticket_medio', currentVal: data.ticket_medio, refVal: comp.ticket_medio, isRate: true },
+  ];
+
+  const trends: Record<string, TrendDirection> = {};
+  const deltas: Record<string, string> = {};
+
+  for (const f of fields) {
+    let currentRate: number;
+    let refRate: number;
+
+    if (f.isRate) {
+      // Absolute values, compare directly
+      currentRate = f.currentVal;
+      refRate = f.refVal;
+    } else {
+      // Normalize to daily rate for comparison
+      currentRate = currentDays > 0 ? f.currentVal / currentDays : 0;
+      refRate = refDays > 0 ? f.refVal / refDays : 0;
+    }
+
+    if (refRate === 0) {
+      if (currentRate > 0) {
+        trends[f.key] = 'up';
+        deltas[f.key] = '+100%';
+      } else {
+        trends[f.key] = 'neutral';
+        deltas[f.key] = '0%';
+      }
+      continue;
+    }
+
+    const pct = ((currentRate - refRate) / Math.abs(refRate)) * 100;
+    const rounded = Math.round(pct);
+
+    if (Math.abs(rounded) < 5) {
+      trends[f.key] = 'neutral';
+      deltas[f.key] = '0%';
+    } else if (rounded > 0) {
+      trends[f.key] = 'up';
+      deltas[f.key] = `+${rounded}%`;
+    } else {
+      trends[f.key] = 'down';
+      deltas[f.key] = `${rounded}%`;
+    }
+  }
+
+  const comparisonValues: Record<string, number> = {};
+  for (const f of fields) {
+    comparisonValues[f.key] = f.refVal;
+  }
+
+  return { trends, comparisonLabel: label, comparisonDeltas: deltas, comparisonValues };
+}
 
 export function useDashboardData(dateRange: string) {
   const [data, setData] = useState<N8nData | null>(null);
@@ -153,6 +242,11 @@ export function useDashboardData(dateRange: string) {
     ];
   }, [data]);
 
+  const { trends, comparisonLabel, comparisonDeltas, comparisonValues } = useMemo(
+    () => (data ? computeTrends(data, dateRange) : { trends: {}, comparisonLabel: '', comparisonDeltas: {}, comparisonValues: {} }),
+    [data, dateRange],
+  );
+
   const { data_inicio, data_fim } = useMemo(() => getDateBounds(dateRange), [dateRange]);
 
   const filteredDealsAtivos = useMemo(() => {
@@ -182,6 +276,10 @@ export function useDashboardData(dateRange: string) {
     funnelData,
     filteredDealsAtivos,
     filteredClientesFechados,
+    trends,
+    comparisonLabel,
+    comparisonDeltas,
+    comparisonValues,
     fetchData,
   };
 }

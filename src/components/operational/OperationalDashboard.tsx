@@ -8,6 +8,7 @@ import { useOperationalCharts } from '@/hooks/useOperationalCharts';
 import { useActivityMetrics } from '@/hooks/useActivityMetrics';
 import { useDateRange } from '@/providers/DateRangeProvider';
 import { formatCurrency, getDateBounds } from '@/lib/formatters';
+import type { DailyEffort } from '@/lib/types';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { MagicCard } from '@/components/ui/MagicCard';
 import { ActivityMetricsRow } from './ActivityMetricsRow';
@@ -16,6 +17,8 @@ import { PipelineByStageChart } from './charts/PipelineByStageChart';
 import { PipelineHealthChart } from './charts/PipelineHealthChart';
 import { AgingDistributionChart } from './charts/AgingDistributionChart';
 import { CommissionByCategoryChart } from './charts/CommissionByCategoryChart';
+import { DailyEffortChart } from './charts/DailyEffortChart';
+import { EffortVsResultChart } from './charts/EffortVsResultChart';
 
 type FilterMode = 'todos' | 'parados' | 'stage';
 
@@ -36,6 +39,7 @@ export const OperationalDashboard = () => {
   const [stageFilter, setStageFilter] = useState<string>('');
   const [listExpanded, setListExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [chartsExpanded, setChartsExpanded] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const allDealsRecalculated = useMemo(() => {
@@ -52,7 +56,7 @@ export const OperationalDashboard = () => {
       return {
         ...deal,
         activities: activitiesInRange,
-        is_stale: activitiesInRange.length === 0,
+        is_stale: deal.is_stale,
       };
     });
   }, [data?.deals, dateRange]);
@@ -74,6 +78,17 @@ export const OperationalDashboard = () => {
 
   const chartData = useOperationalCharts(filteredDeals);
 
+  // Pre-aggregated daily effort data from the esforco_diario sheet
+  const efpiData = useMemo<DailyEffort[]>(() => {
+    return data?.esforco_diario || [];
+  }, [data?.esforco_diario]);
+
+  // Date bounds for filtering
+  const dateBounds = useMemo(() => {
+    if (dateRange === 'alltime') return { data_inicio: '', data_fim: '' };
+    return getDateBounds(dateRange);
+  }, [dateRange]);
+
   const stages = useMemo(() => {
     if (allDealsRecalculated.length === 0) return STAGES;
     const set = new Set(allDealsRecalculated.map(d => d.stage).filter(Boolean));
@@ -88,6 +103,18 @@ export const OperationalDashboard = () => {
       listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   };
+
+  const staleDeals = useMemo(() =>
+    allDealsRecalculated
+      .filter(d => d.is_stale)
+      .sort((a, b) => {
+        // Sort by days since last activity, descending (most stale first)
+        const aDate = a.last_activity_date ? new Date(a.last_activity_date).getTime() : 0;
+        const bDate = b.last_activity_date ? new Date(b.last_activity_date).getTime() : 0;
+        return aDate - bDate;
+      }),
+    [allDealsRecalculated],
+  );
 
   const visibleDeals = showAll ? filteredDeals : filteredDeals.slice(0, INITIAL_VISIBLE);
 
@@ -149,6 +176,44 @@ export const OperationalDashboard = () => {
           Atualizar
         </button>
       </div>
+
+      {/* Stale deals urgency section */}
+      {staleDeals.length > 0 && (
+        <div className="mb-6">
+          <MagicCard className="border-red-200/60 bg-red-50/30 overflow-hidden">
+            <div className="px-4 py-3 flex items-center gap-2 border-b border-red-100/60">
+              <div className="p-1.5 rounded-md bg-red-100 text-red-600">
+                <Flame size={16} />
+              </div>
+              <span className="text-xs font-bold uppercase tracking-widest text-red-700 font-display">
+                {staleDeals.length} {staleDeals.length === 1 ? 'deal parado' : 'deals parados'} ha 7+ dias
+              </span>
+            </div>
+            <div className="px-4 py-3 space-y-1">
+              {staleDeals.slice(0, 5).map((deal, idx) => (
+                <DealPipelineRow key={deal.id} deal={deal} index={idx} compact />
+              ))}
+            </div>
+            {staleDeals.length > 5 && (
+              <div className="px-4 pb-3">
+                <button
+                  onClick={() => {
+                    setFilter('parados');
+                    setStageFilter('');
+                    setListExpanded(true);
+                    setTimeout(() => {
+                      listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }}
+                  className="w-full text-center text-xs text-red-600 hover:text-red-800 font-medium py-2 border border-red-100 rounded-lg hover:border-red-200 transition-colors"
+                >
+                  Ver todos os {staleDeals.length} deals parados →
+                </button>
+              </div>
+            )}
+          </MagicCard>
+        </div>
+      )}
 
       {/* Collapsible deal list (below filters, closed by default) */}
       <div ref={listRef} className="mb-6">
@@ -243,70 +308,137 @@ export const OperationalDashboard = () => {
       {/* ROW 1.5: Activity Metrics */}
       <ActivityMetricsRow metrics={activityMetrics} loading={activityLoading} />
 
-      {/* Loading skeleton for charts */}
-      {loading && !data ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 h-64 bg-slate-50 rounded-xl animate-pulse" />
-            <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
+      {/* Daily Effort Chart — always visible */}
+      <div className="mb-6">
+        <MagicCard className="border-slate-200/60 bg-white/60 overflow-hidden">
+          <div className="px-4 pt-4 pb-1">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 font-display">
+              Esforco por Dia
+            </p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
-            <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* ROW 2: Pipeline by Stage + Health */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            <MagicCard className="lg:col-span-2 p-4 border-slate-200/60 bg-white/60">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
-                Pipeline por Stage
-              </p>
-              <div className="h-[220px]">
-                <PipelineByStageChart data={chartData.pipelineByStage} onStageClick={handleStageClick} />
-              </div>
-            </MagicCard>
-            <MagicCard className="p-4 border-slate-200/60 bg-white/60">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
-                Saude do Pipeline
-              </p>
-              <div className="h-[220px]">
-                <PipelineHealthChart
-                  healthPct={chartData.healthPct}
-                  healthLabel={chartData.healthLabel}
-                  activeCount={chartData.activeCount}
-                  staleCount={chartData.staleCount}
+          <div className="px-4 pb-4">
+            {loading && !data ? (
+              <div className="h-[260px] bg-slate-50 rounded-xl animate-pulse" />
+            ) : (
+              <div className="h-[260px]">
+                <DailyEffortChart
+                  efpiData={efpiData}
+                  dataInicio={dateBounds.data_inicio || undefined}
+                  dataFim={dateBounds.data_fim || undefined}
                 />
               </div>
-            </MagicCard>
+            )}
           </div>
+        </MagicCard>
+      </div>
 
-          {/* ROW 3: Aging + Commission */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <MagicCard className="p-4 border-slate-200/60 bg-white/60">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
-                Distribuicao de Aging
-              </p>
-              <div className="h-[220px]">
-                <AgingDistributionChart data={chartData.agingDistribution} />
-              </div>
-            </MagicCard>
-            <MagicCard className="p-4 border-slate-200/60 bg-white/60">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
-                Comissao por Canal
-              </p>
-              <div className="h-[220px]">
-                <CommissionByCategoryChart
-                  data={chartData.commissionByCategory}
-                  totalCommission={chartData.totalCommission}
-                />
-              </div>
-            </MagicCard>
-          </div>
+      {/* Collapsible charts section */}
+      <div className="mb-6">
+        <MagicCard className="border-slate-200/60 bg-white/60 overflow-hidden">
+          <button
+            onClick={() => setChartsExpanded(!chartsExpanded)}
+            className="w-full px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors"
+          >
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-500 font-display">
+              Analises Detalhadas (pipeline, aging, comissoes)
+            </span>
+            <motion.div
+              animate={{ rotate: chartsExpanded ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="text-slate-400"
+            >
+              <ChevronDown size={16} />
+            </motion.div>
+          </button>
 
-        </>
-      )}
+          <AnimatePresence initial={false}>
+            {chartsExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 pb-4 space-y-6">
+                  {loading && !data ? (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="lg:col-span-2 h-64 bg-slate-50 rounded-xl animate-pulse" />
+                        <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
+                        <div className="h-64 bg-slate-50 rounded-xl animate-pulse" />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Effort vs Result */}
+                      <div className="p-4 border border-slate-100 rounded-xl bg-white/80">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
+                          Esforco vs Resultado
+                        </p>
+                        <div className="h-[220px]">
+                          <EffortVsResultChart metrics={activityMetrics} />
+                        </div>
+                      </div>
+
+                      {/* Pipeline by Stage + Health */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="lg:col-span-2 p-4 border border-slate-100 rounded-xl bg-white/80">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
+                            Pipeline por Stage
+                          </p>
+                          <div className="h-[220px]">
+                            <PipelineByStageChart data={chartData.pipelineByStage} onStageClick={handleStageClick} />
+                          </div>
+                        </div>
+                        <div className="p-4 border border-slate-100 rounded-xl bg-white/80">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
+                            Saude do Pipeline
+                          </p>
+                          <div className="h-[220px]">
+                            <PipelineHealthChart
+                              healthPct={chartData.healthPct}
+                              healthLabel={chartData.healthLabel}
+                              activeCount={chartData.activeCount}
+                              staleCount={chartData.staleCount}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Aging + Commission */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="p-4 border border-slate-100 rounded-xl bg-white/80">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
+                            Distribuicao de Aging
+                          </p>
+                          <div className="h-[220px]">
+                            <AgingDistributionChart data={chartData.agingDistribution} />
+                          </div>
+                        </div>
+                        <div className="p-4 border border-slate-100 rounded-xl bg-white/80">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3 font-display">
+                            Comissao por Canal
+                          </p>
+                          <div className="h-[220px]">
+                            <CommissionByCategoryChart
+                              data={chartData.commissionByCategory}
+                              totalCommission={chartData.totalCommission}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </MagicCard>
+      </div>
     </div>
   );
 };
