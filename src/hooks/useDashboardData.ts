@@ -45,6 +45,8 @@ function computeTrends(
     { key: 'taxa_conectividade', currentVal: data.taxa_conectividade, refVal: comp.taxa_conectividade, isRate: true },
     { key: 'win_rate', currentVal: data.win_rate, refVal: comp.win_rate, isRate: true },
     { key: 'ticket_medio', currentVal: data.ticket_medio, refVal: comp.ticket_medio, isRate: true },
+    { key: 'contatos_decisor', currentVal: data.contatos_decisor, refVal: comp.contatos_decisor },
+    { key: 'contatos_decisor_info', currentVal: data.contatos_decisor_info, refVal: comp.contatos_decisor_info },
   ];
 
   const trends: Record<string, TrendDirection> = {};
@@ -113,12 +115,7 @@ export function useDashboardData(dateRange: string) {
   };
 
   const fetchData = async (range: string, force = false) => {
-    const now = Date.now();
-    if (!force && now - lastFetchRef.current < REFRESH_INTERVAL_MS) {
-      return;
-    }
-    lastFetchRef.current = now;
-
+    // 1) Cache check FIRST (before throttle) — switching filters should be instant
     if (!force) {
       const cached = getCachedData(range);
       if (cached) {
@@ -128,6 +125,13 @@ export function useDashboardData(dateRange: string) {
         return;
       }
     }
+
+    // 2) Throttle only applies to API calls (no cache hit)
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < REFRESH_INTERVAL_MS) {
+      return;
+    }
+    lastFetchRef.current = now;
 
     try {
       setLoading(true);
@@ -219,7 +223,7 @@ export function useDashboardData(dateRange: string) {
   };
 
   useEffect(() => {
-    fetchData(dateRange, true);
+    fetchData(dateRange);
   }, [dateRange]);
 
   const funnelData = useMemo(() => {
@@ -249,23 +253,27 @@ export function useDashboardData(dateRange: string) {
 
   const { data_inicio, data_fim } = useMemo(() => getDateBounds(dateRange), [dateRange]);
 
+  const isAllTime = dateRange === 'alltime';
+
   const filteredDealsAtivos = useMemo(() => {
     if (!data) return [];
+    if (isAllTime) return data.deals_ativos;
     return data.deals_ativos.filter(d => {
       const date = normalizeDate(d.id_data) || normalizeDate(d.data);
       if (!date) return true;
       return date >= data_inicio && date <= data_fim;
     });
-  }, [data, data_inicio, data_fim]);
+  }, [data, data_inicio, data_fim, isAllTime]);
 
   const filteredClientesFechados = useMemo(() => {
     if (!data) return [];
+    if (isAllTime) return data.clientes_fechados;
     return data.clientes_fechados.filter(d => {
       const date = normalizeDate(d.id_data) || normalizeDate(d.data);
       if (!date) return true;
       return date >= data_inicio && date <= data_fim;
     });
-  }, [data, data_inicio, data_fim]);
+  }, [data, data_inicio, data_fim, isAllTime]);
 
   return {
     data,

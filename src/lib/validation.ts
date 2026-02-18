@@ -26,6 +26,9 @@ export const validateN8nData = (raw: any): N8nData => {
     comissao_fechado: Math.max(0, num(raw.comissao_fechado)),
     ticket_medio: Math.max(0, num(raw.ticket_medio)),
     win_rate: Math.min(100, Math.max(0, num(raw.win_rate))),
+    contatos_decisor: Math.max(0, num(raw.contatos_decisor)),
+    contatos_decisor_info: Math.max(0, num(raw.contatos_decisor_info)),
+    deals_pipeline: Math.max(0, num(raw.deals_pipeline)),
     ultimo_cliente: {
       nome: str(raw.ultimo_cliente?.nome, 'N/A'),
       origem: str(raw.ultimo_cliente?.origem, 'N/A'),
@@ -56,6 +59,8 @@ export const validateN8nData = (raw: any): N8nData => {
           taxa_conectividade: num(raw._comparison.taxa_conectividade),
           win_rate: num(raw._comparison.win_rate),
           ticket_medio: num(raw._comparison.ticket_medio),
+          contatos_decisor: num(raw._comparison.contatos_decisor),
+          contatos_decisor_info: num(raw._comparison.contatos_decisor_info),
         }}
       : {}),
   };

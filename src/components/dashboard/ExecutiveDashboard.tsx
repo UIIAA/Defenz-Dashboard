@@ -2,8 +2,9 @@
 
 import {
   Users, Zap, DollarSign, Trophy, Percent, BarChart3,
-  AlertTriangle, RefreshCcw, Loader2
+  AlertTriangle, RefreshCcw, Loader2, UserCheck, Download
 } from 'lucide-react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -13,8 +14,12 @@ import { LastClientCard } from '@/components/dashboard/LastClientCard';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { MagicCard } from '@/components/ui/MagicCard';
 import { DailyEffortChart } from '@/components/operational/charts/DailyEffortChart';
+import { EsforcoSection } from '@/components/dashboard/EsforcoSection';
+import { AgendaSection } from '@/components/dashboard/AgendaSection';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useEsforcoDiario } from '@/hooks/useEsforcoDiario';
+import { useEsforcoData } from '@/hooks/useEsforcoData';
+import { useAgendaData } from '@/hooks/useAgendaData';
 import { useDateRange } from '@/providers/DateRangeProvider';
 import { formatCurrency, getDateBounds } from '@/lib/formatters';
 import type { DataSource } from '@/lib/types';
@@ -33,6 +38,7 @@ const DataSourceBadge = ({ source }: { source: DataSource }) => (
 );
 
 export const ExecutiveDashboard = () => {
+  const [exporting, setExporting] = useState(false);
   const { dateRange } = useDateRange();
   const {
     data,
@@ -51,9 +57,30 @@ export const ExecutiveDashboard = () => {
   } = useDashboardData(dateRange);
 
   const { data: efpiData, loading: efpiLoading } = useEsforcoDiario();
+  const { data: esforcoData, loading: esforcoLoading } = useEsforcoData();
+  const { data: agendaData, loading: agendaLoading } = useAgendaData();
   const dateBounds = getDateBounds(dateRange);
 
   const hasComparison = comparisonLabel !== '';
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/export/excel', { method: 'POST' });
+      if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `defenz_executivo_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Export error:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const buildComparisonLine = (
     key: string,
@@ -73,7 +100,7 @@ export const ExecutiveDashboard = () => {
   };
 
   if (error) {
-    return <ErrorState error={error} onRetry={() => fetchData(dateRange)} />;
+    return <ErrorState error={error} onRetry={() => fetchData(dateRange, true)} />;
   }
 
   if (loading && !data) {
@@ -93,8 +120,17 @@ export const ExecutiveDashboard = () => {
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="space-y-6"
+        className="relative space-y-6"
       >
+        {/* Overlay spinner when reloading with existing data */}
+        {loading && data && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-5">
+              <Loader2 size={80} className="animate-spin text-red-500" />
+              <p className="text-lg text-slate-600 font-semibold tracking-wide">Atualizando dados...</p>
+            </div>
+          </div>
+        )}
         {/* Status bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 text-sm text-slate-400">
@@ -132,7 +168,15 @@ export const ExecutiveDashboard = () => {
               </div>
             )}
             <button
-              onClick={() => fetchData(dateRange)}
+              onClick={handleExport}
+              disabled={exporting}
+              className="p-2 bg-white/80 border border-slate-200/60 rounded-full hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-500 hover:text-red-600 shadow-sm disabled:opacity-50"
+              title="Exportar Excel Executivo"
+            >
+              {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            </button>
+            <button
+              onClick={() => fetchData(dateRange, true)}
               disabled={loading}
               className="p-2 bg-white/80 border border-slate-200/60 rounded-full hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-500 hover:text-red-600 shadow-sm disabled:opacity-50"
               title="Atualizar Dados"
@@ -165,9 +209,9 @@ export const ExecutiveDashboard = () => {
             icon={DollarSign}
             title="Pipeline"
             value={data ? formatCurrency(data.comissao_pipeline) : "-"}
-            subtext={`${filteredDealsAtivos.length} deals — ${data ? formatCurrency(data.valor_pipeline) : '-'}`}
+            subtext={`${data?.deals_pipeline || 0} deals c/ proposta — ${data ? formatCurrency(data.valor_pipeline) : '-'}`}
             highlight={true}
-            tooltip="Soma das comissoes de todos os deals ativos. Taxas: Direto 58%, Parceiro 43%, SecuriSoft 5%."
+            tooltip="Comissao dos deals com proposta na rua (Proposta Enviada, Em negociacao, Negociacao/Revisao). Taxas: Direto 58%, Parceiro 43%, SecuriSoft 5%."
           />
           <StatCard
             loading={loading}
@@ -214,6 +258,30 @@ export const ExecutiveDashboard = () => {
           />
         </div>
 
+        {/* Contatos Qualificados — conditional render */}
+        {data && data.contatos_decisor > 0 && (
+          <div className="grid grid-cols-2 lg:grid-cols-2 gap-4 max-w-lg">
+            <StatCard
+              loading={loading}
+              icon={UserCheck}
+              title="Contato c/ Decisor"
+              value={String(data.contatos_decisor)}
+              subtext="Deals marcados com [DECISOR]"
+              tooltip="Quantidade de deals criados no periodo cujo campo Resultados contem a tag [DECISOR]."
+            />
+            <StatCard
+              loading={loading}
+              icon={UserCheck}
+              title="Decisor + Info"
+              value={String(data.contatos_decisor_info)}
+              subtext={data.contatos_decisor > 0
+                ? `${Math.round((data.contatos_decisor_info / data.contatos_decisor) * 100)}% dos contatos c/ decisor`
+                : "Nenhum contato com decisor"}
+              tooltip="Deals com [DECISOR_INFO]: contato com decisor E informacoes tecnicas coletadas."
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Funnel Chart Section */}
           <div className="lg:col-span-2 h-[500px]">
@@ -248,6 +316,12 @@ export const ExecutiveDashboard = () => {
             )}
           </div>
         </MagicCard>
+
+        {/* Funil de Esforco Comercial (IA) */}
+        <EsforcoSection data={esforcoData} loading={esforcoLoading} />
+
+        {/* Agenda de Prospeccao */}
+        <AgendaSection data={agendaData} loading={agendaLoading} />
 
         {/* Data Tables Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

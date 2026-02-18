@@ -23,14 +23,14 @@ export const StatCard = ({ icon: Icon, title, value, subtext, highlight, loading
   <MagicCard className="h-full flex flex-col justify-between border-slate-200/60 bg-white/60 hover:border-red-500/30 hover:shadow-red-500/5 transition-all duration-500">
     <div className={`flex justify-between items-start ${heroSize ? 'mb-5' : 'mb-4'}`}>
       <div>
-        <p className={`text-slate-500 font-bold uppercase tracking-widest font-display flex items-center gap-1.5 ${heroSize ? 'text-sm' : 'text-xs'}`}>
+        <div className={`text-slate-500 font-bold uppercase tracking-widest font-display flex items-center gap-1.5 ${heroSize ? 'text-sm' : 'text-xs'}`}>
           {title}
           {tooltip && (
             <Tooltip content={tooltip}>
               <Info size={heroSize ? 14 : 12} className="text-slate-300 hover:text-slate-500 transition-colors cursor-help" />
             </Tooltip>
           )}
-        </p>
+        </div>
         {loading ? (
           <div className={`bg-slate-200 rounded mt-1 animate-pulse ${heroSize ? 'h-10 w-32' : 'h-8 w-24'}`}></div>
         ) : (

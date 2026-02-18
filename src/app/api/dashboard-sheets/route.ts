@@ -1,70 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
+import { fetchFromSheets } from "@/lib/sheets";
 
 // Cache em memória (por instância do servidor)
-// Em produção, usar Redis/Upstash para cache persistente
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
-
-// ID da planilha do Google Sheets
-const SPREADSHEET_ID = "1U6ley8bTw6SuVqoxLJDlVUFCkkYSAVPz9AZm6AU40p4";
-
-// Função para ler do Google Sheets (planilha pública como CSV)
-async function fetchFromSheets(sheetName: string): Promise<any[]> {
-  // URL de exportação CSV do Google Sheets
-  // Nota: A planilha precisa ser pública para leitura
-  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}`;
-
-  try {
-    const response = await fetch(url, { next: { revalidate: 1800 } }); // Cache de 30min no Next.js
-
-    if (!response.ok) {
-      console.error(`Sheets fetch failed: ${response.status}`);
-      return [];
-    }
-
-    const text = await response.text();
-
-    // O Google retorna um JSON com prefixo que precisa ser removido
-    const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?$/);
-    if (!jsonMatch) {
-      console.error("Could not parse Sheets response");
-      return [];
-    }
-
-    const json = JSON.parse(jsonMatch[1]);
-    const rows = json.table?.rows || [];
-    const cols = json.table?.cols || [];
-
-    // Converter para array de objetos
-    const headers = cols.map((col: any) => (col.label || col.id).trim());
-
-    return rows.map((row: any) => {
-      const obj: any = {};
-      row.c?.forEach((cell: any, i: number) => {
-        const header = headers[i];
-        if (header) {
-          let value = cell?.v ?? null;
-          // Google Sheets gviz retorna datas como "Date(year,month,day)" (month 0-indexed)
-          if (typeof value === 'string' && value.startsWith('Date(')) {
-            const match = value.match(/Date\((\d+),(\d+),(\d+)\)/);
-            if (match) {
-              const year = match[1];
-              const month = String(Number(match[2]) + 1).padStart(2, '0');
-              const day = match[3].padStart(2, '0');
-              value = `${year}-${month}-${day}`;
-            }
-          }
-          obj[header] = value;
-        }
-      });
-      return obj;
-    });
-  } catch (error) {
-    console.error("Error fetching from Sheets:", error);
-    return [];
-  }
-}
 
 // Mapear período do Dashboard para período da planilha
 type PeriodoResult =
@@ -90,7 +30,7 @@ function mapPeriodo(range: string): PeriodoResult {
   if (range === "15d") return { custom: false, key: "15d" };
   if (range === "30d") return { custom: false, key: "30d" };
   if (range === "month") return { custom: false, key: "mes" };
-  if (range === "alltime") return { custom: false, key: "30d" };
+  if (range === "alltime") return { custom: false, key: "alltime" };
   return { custom: false, key: "hoje" };
 }
 
@@ -145,6 +85,12 @@ export async function GET(request: NextRequest) {
     // Buscar da aba "metricas"
     const metricas = await fetchFromSheets("metricas");
 
+    // Buscar deals ativos e clientes fechados (needed for alltime + standard)
+    const [dealsAtivos, clientesFechados] = await Promise.all([
+      fetchFromSheets("deals_ativos"),
+      fetchFromSheets("clientes_fechados")
+    ]);
+
     // Filtrar pela linha do período solicitado (pegar a mais recente)
     const metricasPeriodo = metricas
       .filter((row: any) => row.periodo === periodoResult.key)
@@ -161,12 +107,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Buscar deals ativos e clientes fechados
-    const [dealsAtivos, clientesFechados] = await Promise.all([
-      fetchFromSheets("deals_ativos"),
-      fetchFromSheets("clientes_fechados")
-    ]);
-
     // For custom ranges, recompute deal metrics from raw clientes_fechados
     let dealsFechadosCount = Number(metrica.deals_fechados) || 0;
     let valorFechado = Number(metrica.valor_fechado) || 0;
@@ -181,6 +121,7 @@ export async function GET(request: NextRequest) {
       } : null;
     let periodoLabel = metrica.periodo === "hoje" ? metrica.data_coleta :
                        metrica.periodo === "mes" ? "Este Mês" :
+                       metrica.periodo === "alltime" ? "All Time" :
                        `Últimos ${metrica.periodo.replace("d", "")} dias`;
 
     if (periodoResult.custom) {
@@ -243,6 +184,8 @@ export async function GET(request: NextRequest) {
           taxa_conectividade: Number(refRow.taxa_conectividade) || 0,
           win_rate: Number(refRow.win_rate) || 0,
           ticket_medio: Number(refRow.ticket_medio) || 0,
+          contatos_decisor: Number(refRow.contatos_decisor) || 0,
+          contatos_decisor_info: Number(refRow.contatos_decisor_info) || 0,
         };
       }
     }
@@ -267,6 +210,9 @@ export async function GET(request: NextRequest) {
       comissao_fechado: comissaoFechado,
       ticket_medio: ticketMedio,
       win_rate: Number(metrica.win_rate) || 0,
+      contatos_decisor: Number(metrica.contatos_decisor) || 0,
+      contatos_decisor_info: Number(metrica.contatos_decisor_info) || 0,
+      deals_pipeline: Number(metrica.deals_pipeline) || 0,
       ultimo_cliente: ultimoCliente,
       parceiros: {
         total: 5,

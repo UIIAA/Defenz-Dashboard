@@ -37,6 +37,9 @@ export const generateMockData = (range: string): N8nData => {
     comissao_fechado: 730.87 * multiplier,
     ticket_medio: 32000,
     win_rate: dealsFechados > 0 ? 40 : 0,
+    contatos_decisor: 0,
+    contatos_decisor_info: 0,
+    deals_pipeline: 3,
     ultimo_cliente: {
       nome: "Zztech Informatica LTDA",
       origem: "Parceiro SS (SecuriSoft)",

@@ -1,59 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
-
-const SPREADSHEET_ID = "1U6ley8bTw6SuVqoxLJDlVUFCkkYSAVPz9AZm6AU40p4";
+import { fetchFromSheets } from "@/lib/sheets";
 
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL_MS = 30 * 60 * 1000;
-
-async function fetchFromSheets(sheetName: string): Promise<any[]> {
-  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${encodeURIComponent(sheetName)}`;
-
-  try {
-    const response = await fetch(url, { next: { revalidate: 1800 } });
-
-    if (!response.ok) {
-      console.error(`Sheets fetch failed: ${response.status}`);
-      return [];
-    }
-
-    const text = await response.text();
-    const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?$/);
-    if (!jsonMatch) {
-      console.error("Could not parse Sheets response");
-      return [];
-    }
-
-    const json = JSON.parse(jsonMatch[1]);
-    const rows = json.table?.rows || [];
-    const cols = json.table?.cols || [];
-    const headers = cols.map((col: any) => (col.label || col.id).trim());
-
-    return rows.map((row: any) => {
-      const obj: any = {};
-      row.c?.forEach((cell: any, i: number) => {
-        const header = headers[i];
-        if (header) {
-          let value = cell?.v ?? null;
-          if (typeof value === 'string' && value.startsWith('Date(')) {
-            const match = value.match(/Date\((\d+),(\d+),(\d+)\)/);
-            if (match) {
-              const year = match[1];
-              const month = String(Number(match[2]) + 1).padStart(2, '0');
-              const day = match[3].padStart(2, '0');
-              value = `${year}-${month}-${day}`;
-            }
-          }
-          obj[header] = value;
-        }
-      });
-      return obj;
-    });
-  } catch (error) {
-    console.error("Error fetching from Sheets:", error);
-    return [];
-  }
-}
 
 const STALE_THRESHOLD_DAYS = 7;
 

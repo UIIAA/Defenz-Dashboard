@@ -13,7 +13,7 @@ export const getDateBounds = (range: string): { data_inicio: string; data_fim: s
     return { data_inicio: today, data_fim: today };
   }
   if (range === 'alltime') {
-    return { data_inicio: '2020-01-01', data_fim: today };
+    return { data_inicio: '2025-11-01', data_fim: today };
   }
   if (range === 'today') {
     return { data_inicio: today, data_fim: today };

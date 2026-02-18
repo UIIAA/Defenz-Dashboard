@@ -46,6 +46,9 @@ export interface N8nData {
   comissao_fechado: number;
   ticket_medio: number;
   win_rate: number;
+  contatos_decisor: number;
+  contatos_decisor_info: number;
+  deals_pipeline: number;
   ultimo_cliente: Client;
   parceiros: Partners;
   deals_ativos: Deal[];
@@ -64,6 +67,8 @@ export interface ComparisonData {
   taxa_conectividade: number;
   win_rate: number;
   ticket_medio: number;
+  contatos_decisor: number;
+  contatos_decisor_info: number;
 }
 
 export type TrendDirection = 'up' | 'down' | 'neutral';
@@ -95,4 +100,115 @@ export interface DailyEffort {
   emails: number;
   meetings: number;
   total: number;
+}
+
+// Esforco Comercial (IA Classification) types
+export interface ClassificacaoDeal {
+  lead_id: string;
+  lead_name: string;
+  data_classificacao: string;
+  nivel_maximo: 'secretaria' | 'tecnico' | 'decisor' | 'nenhum_contato' | 'tag_apenas' | 'erro_parse';
+  passou_secretaria: boolean;
+  resultado_principal: string;
+  concorrente: string;
+  renovacao_concorrente: string;
+  toques_estimados: number;
+  pessoa_contactada: string;
+  cargo_estimado: string;
+  resumo: string;
+}
+
+export interface EsforcoMetrics {
+  deals_com_resultados: number;
+  taxa_gatekeeper: number;
+  taxa_decisor: number;
+  toques_medio: number;
+  resposta_top1: string;
+  concorrente_top1: string;
+  deals_com_concorrente: number;
+}
+
+export interface EsforcoFunnelStep {
+  label: string;
+  value: number;
+  percent: number;
+}
+
+export interface EsforcoData {
+  classificacoes: ClassificacaoDeal[];
+  metrics: EsforcoMetrics;
+  funnel: EsforcoFunnelStep[];
+  respostas: { label: string; count: number }[];
+  concorrentes: { nome: string; deals: number; renovacao: string }[];
+}
+
+export type ClassificacaoLead = ClassificacaoDeal;
+
+export interface AgendaItem {
+  task_id: string;
+  lead_id: string;
+  lead_name: string;
+  empresa: string;
+  subject: string;
+  due_date: string;
+  status: string;
+  description: string;
+  owner: string;
+  is_overdue: boolean;
+  lead_status: string;
+}
+
+export interface AgendaData {
+  items: AgendaItem[];
+  total: number;
+  overdue: number;
+  upcoming_7d: number;
+}
+
+// Excel Export types (V3.9)
+export interface EnrichedLead {
+  // Dados do lead (leads_completo)
+  lead_id: string;
+  nome: string;
+  empresa: string;
+  lead_source: string;
+  lead_status: string;
+  telefone: string;
+  email: string;
+  created_time: string;
+  modified_time: string;
+  owner: string;
+  // Classificacao IA (classificacao_esforco) — ou defaults se DEPRECADO
+  nivel_maximo: string;
+  passou_secretaria: boolean;
+  resultado_principal: string;
+  concorrente: string;
+  toques_estimados: number;
+  cargo_estimado: string;
+  resumo: string;
+  // Correlacao
+  total_ligacoes: number;
+  ligacoes_atendidas: number;
+  total_emails: number;
+  canal: 'ligacoes_only' | 'emails_only' | 'ambos' | 'nenhum';
+  primeiro_contato: string;
+  ultimo_contato: string;
+  // Tag
+  is_deprecado: boolean;
+}
+
+export interface ScorecardKPI {
+  metrica: string;
+  valor: number;
+  benchmark: string;
+  gap: string;
+  status: 'ok' | 'warning' | 'critical';
+}
+
+export interface ExcelExportData {
+  leads: EnrichedLead[];
+  metricas: any;
+  deals_ativos: any[];
+  clientes_fechados: any[];
+  kpis: ScorecardKPI[];
 }
