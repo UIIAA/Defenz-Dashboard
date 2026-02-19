@@ -1,12 +1,13 @@
 import type { EnrichedLead } from './types';
 
 /**
- * Normalize phone: strip non-digits, return last 8 digits.
- * "11 3123-4567" → "31234567", "+551131234567" → "31234567"
+ * Normalize phone: strip non-digits, return last N digits.
+ * Used to build dual-key index (8 and 9 digits) for matching.
  */
-export function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  return digits.slice(-8);
+export function normalizePhone(phone: string, digits: 8 | 9 = 9): string {
+  const d = phone.replace(/\D/g, '');
+  if (d.length < 7) return ''; // too short (internal, 0800, etc.)
+  return d.slice(-digits);
 }
 
 /**
@@ -14,6 +15,19 @@ export function normalizePhone(phone: string): string {
  */
 export function normalizeEmail(email: string): string {
   return (email || '').toLowerCase().trim();
+}
+
+/** Domains too generic for company matching */
+const GENERIC_DOMAINS = new Set([
+  'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.com.br',
+  'live.com', 'icloud.com', 'aol.com', 'uol.com.br', 'bol.com.br',
+  'terra.com.br', 'ig.com.br', 'globo.com', 'protonmail.com',
+  'outlook.com.br', 'hotmail.com.br',
+]);
+
+function extractDomain(email: string): string {
+  const at = email.lastIndexOf('@');
+  return at > 0 ? email.slice(at + 1).toLowerCase().trim() : '';
 }
 
 interface RawLead {
@@ -80,24 +94,34 @@ export function correlateLeads(
   emails: RawEmail[],
   classificacoes: RawClassificacao[]
 ): EnrichedLead[] {
-  // Build phone → lead_id map
-  const phoneToLeadId = new Map<string, string>();
+  // Build phone → lead_id maps (dual key: 8 and 9 digits)
+  const phone9ToLeadId = new Map<string, string>();
+  const phone8ToLeadId = new Map<string, string>();
   const emailToLeadId = new Map<string, string>();
+  // Domain → lead_ids for fallback matching (excludes generic domains)
+  const domainToLeadIds = new Map<string, string[]>();
 
   for (const lead of leads) {
     const id = String(lead.lead_id || '');
     if (!id) continue;
 
     if (lead.telefone) {
-      const norm = normalizePhone(String(lead.telefone));
-      if (norm.length >= 7) {
-        phoneToLeadId.set(norm, id);
-      }
+      const norm9 = normalizePhone(String(lead.telefone), 9);
+      const norm8 = normalizePhone(String(lead.telefone), 8);
+      if (norm9) phone9ToLeadId.set(norm9, id);
+      if (norm8) phone8ToLeadId.set(norm8, id);
     }
     if (lead.email) {
       const norm = normalizeEmail(String(lead.email));
       if (norm && norm.includes('@')) {
         emailToLeadId.set(norm, id);
+        // Build domain index for fallback
+        const domain = extractDomain(norm);
+        if (domain && !GENERIC_DOMAINS.has(domain)) {
+          const arr = domainToLeadIds.get(domain);
+          if (arr) arr.push(id);
+          else domainToLeadIds.set(domain, [id]);
+        }
       }
     }
   }
@@ -121,11 +145,14 @@ export function correlateLeads(
     return a;
   };
 
-  // Match calls to leads by phone
+  // Match calls to leads by phone (try 9-digit first, then 8-digit)
   for (const call of calls) {
     if (!call.destino) continue;
-    const norm = normalizePhone(String(call.destino));
-    const leadId = phoneToLeadId.get(norm);
+    const dest = String(call.destino);
+    const norm9 = normalizePhone(dest, 9);
+    const norm8 = normalizePhone(dest, 8);
+    const leadId = (norm9 && phone9ToLeadId.get(norm9))
+                || (norm8 && phone8ToLeadId.get(norm8));
     if (!leadId) continue;
 
     const a = getAccum(leadId);
@@ -139,17 +166,33 @@ export function correlateLeads(
     }
   }
 
-  // Match emails to leads by email address
+  // Match emails to leads: exact email first, then domain fallback
   for (const email of emails) {
     if (!email.destinatario) continue;
     const norm = normalizeEmail(String(email.destinatario));
-    const leadId = emailToLeadId.get(norm);
-    if (!leadId) continue;
 
-    const a = getAccum(leadId);
-    a.total_emails++;
-    if (email.data) {
-      a.datas_contato.push(String(email.data).slice(0, 10));
+    // 1) Exact match
+    let matchedIds: string[] = [];
+    const exactId = emailToLeadId.get(norm);
+    if (exactId) {
+      matchedIds = [exactId];
+    } else {
+      // 2) Domain fallback: same corporate domain → attribute to those leads
+      const domain = extractDomain(norm);
+      if (domain && !GENERIC_DOMAINS.has(domain)) {
+        const domainIds = domainToLeadIds.get(domain);
+        if (domainIds && domainIds.length > 0) {
+          matchedIds = domainIds;
+        }
+      }
+    }
+
+    for (const leadId of matchedIds) {
+      const a = getAccum(leadId);
+      a.total_emails++;
+      if (email.data) {
+        a.datas_contato.push(String(email.data).slice(0, 10));
+      }
     }
   }
 
