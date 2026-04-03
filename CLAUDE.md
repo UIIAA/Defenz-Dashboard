@@ -12,7 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Runtime**: React 19
 - **Styling**: Tailwind CSS 4 with CSS custom properties ("Defenz Lux" theme)
 - **Animations**: Framer Motion
-- **Charts**: Custom SVG funnel chart (`FunnelChart.tsx`)
+- **Charts**: Recharts (operational charts) + custom SVG funnel (`FunnelChart.tsx`)
+- **Excel export**: exceljs (multi-sheet styled exports)
 - **Date handling**: date-fns with pt-BR locale, react-day-picker
 - **UI primitives**: Radix UI (Popover), Lucide icons
 - **Auth**: Custom HMAC-SHA256 signed cookies (no NextAuth, no third-party auth)
@@ -57,6 +58,9 @@ src/
 │       ├── dashboard/route.ts        # POST: proxies date range to N8N webhook
 │       ├── dashboard-sheets/route.ts # GET: reads metrics from Google Sheets
 │       ├── operational/route.ts      # GET: reads deals + activities from Sheets
+│       ├── esforco/route.ts          # GET: reads IA classification data from Sheets
+│       ├── agenda/route.ts           # GET: reads agenda/tasks from Sheets
+│       ├── export/excel/route.ts     # POST: multi-sheet Excel export (rate limited 30s)
 │       └── auth/logout/route.ts      # GET: clears session cookie, redirects to /login
 ├── components/
 │   ├── ErrorBoundary.tsx             # React error boundary with reload button
@@ -69,13 +73,17 @@ src/
 │   │   ├── DealRow.tsx               # Deal row with origin badge
 │   │   ├── DealsTable.tsx            # Scrollable deals table
 │   │   ├── PartnersCard.tsx          # Partners list
-│   │   └── LastClientCard.tsx        # Last closed client card
+│   │   ├── LastClientCard.tsx        # Last closed client card
+│   │   ├── AgendaSection.tsx         # Agenda prospection section
+│   │   └── EsforcoSection.tsx        # IA effort funnel section
 │   ├── operational/
 │   │   ├── OperationalDashboard.tsx   # Operational page (pipeline, activities)
 │   │   ├── DealPipelineRow.tsx        # Expandable deal row with aging + timeline
+│   │   ├── ActivityMetricsRow.tsx     # Activity metrics row
 │   │   ├── ActivityTimeline.tsx       # Activity timeline per deal
 │   │   ├── DealAgingBadge.tsx         # Color-coded days-in-stage badge
-│   │   └── StaleAlert.tsx             # Red stale activity alert
+│   │   ├── StaleAlert.tsx             # Red stale activity alert
+│   │   └── charts/                    # 7 Recharts components (pipeline, aging, effort, etc.)
 │   ├── shared/
 │   │   └── ErrorState.tsx            # Error display with retry
 │   ├── charts/
@@ -83,16 +91,25 @@ src/
 │   └── ui/
 │       ├── MagicCard.tsx             # Animated card with gradient border effect
 │       ├── DateFilter.tsx            # Date range picker (preset ranges + custom)
+│       ├── Tooltip.tsx               # Tooltip component
 │       ├── calendar.tsx              # shadcn/ui calendar (react-day-picker)
 │       └── popover.tsx               # shadcn/ui popover (Radix)
 ├── hooks/
 │   ├── useDashboardData.ts           # Executive data fetch cascade
-│   └── useOperationalData.ts         # Operational data fetch + cache
+│   ├── useOperationalData.ts         # Operational data fetch + cache
+│   ├── useEsforcoData.ts             # IA classification data fetch
+│   ├── useEsforcoDiario.ts           # Daily effort tracking
+│   ├── useAgendaData.ts              # Agenda data fetch
+│   ├── useActivityMetrics.ts         # Activity metrics calculations
+│   └── useOperationalCharts.ts       # Chart data aggregation
 ├── providers/
 │   └── DateRangeProvider.tsx          # Shared date range context
 ├── lib/
 │   ├── auth.ts                       # HMAC-JWT session management
 │   ├── types.ts                      # All TypeScript interfaces
+│   ├── sheets.ts                     # Shared fetchFromSheets() — Google Sheets gviz API
+│   ├── correlate.ts                  # Lead↔call↔email correlation (phone 8+9 dig, domain fallback)
+│   ├── excel-builder.ts              # Multi-sheet Excel builder with styling (5 tabs)
 │   ├── formatters.ts                 # Currency, date, origin formatting
 │   ├── validation.ts                 # N8N data validation + consistency
 │   ├── cache.ts                      # sessionStorage cache utilities
@@ -225,6 +242,9 @@ The application implements several security hardening measures:
 | API proxy to N8N | `src/app/api/dashboard/route.ts` |
 | API Google Sheets (executive) | `src/app/api/dashboard-sheets/route.ts` |
 | API Operational (deals+activities) | `src/app/api/operational/route.ts` |
+| API Esforco (IA classification) | `src/app/api/esforco/route.ts` |
+| API Agenda (tasks/prospection) | `src/app/api/agenda/route.ts` |
+| API Excel export | `src/app/api/export/excel/route.ts` |
 | Logout endpoint | `src/app/api/auth/logout/route.ts` |
 | Route group layout | `src/app/(dashboard)/layout.tsx` |
 | Executive dashboard | `src/components/dashboard/ExecutiveDashboard.tsx` |
@@ -233,6 +253,11 @@ The application implements several security hardening measures:
 | Shared types | `src/lib/types.ts` |
 | Executive data hook | `src/hooks/useDashboardData.ts` |
 | Operational data hook | `src/hooks/useOperationalData.ts` |
+| Esforco data hook | `src/hooks/useEsforcoData.ts` |
+| Agenda data hook | `src/hooks/useAgendaData.ts` |
+| Shared Sheets fetcher | `src/lib/sheets.ts` |
+| Lead correlation engine | `src/lib/correlate.ts` |
+| Excel export builder | `src/lib/excel-builder.ts` |
 | Date range context | `src/providers/DateRangeProvider.tsx` |
 | Funnel chart | `src/components/charts/FunnelChart.tsx` |
 | Date filter | `src/components/ui/DateFilter.tsx` |
@@ -242,128 +267,9 @@ The application implements several security hardening measures:
 
 ---
 
-## CHANGELOG - Fevereiro 2026
+## Business Rules
 
-### 2026-02-04: Nova Arquitetura de Dados
-
-**Problema identificado:** Os filtros de periodo (7 dias, 15 dias, etc.) nao funcionavam corretamente porque o N8N fazia multiplas chamadas de API em tempo real, causando lentidao e dados inconsistentes.
-
-**Solucao implementada:**
-
-#### 1. Nova API Route: `/api/dashboard-sheets`
-
-Criada nova rota que le dados diretamente do Google Sheets:
-- Arquivo: `src/app/api/dashboard-sheets/route.ts`
-- Le da aba `metricas` da planilha `19-01_Dashboard_Defenz`
-- Cache em memoria de 30 minutos
-- Fallback automatico para N8N se a planilha nao tiver dados
-
-#### 2. Cache no Cliente (sessionStorage)
-
-O Dashboard agora implementa cache local:
-- Dados sao salvos no `sessionStorage` por 30 minutos
-- Ao trocar de filtro, primeiro verifica o cache
-- Indicador visual mostra a fonte dos dados: Cache, Planilha, N8N, ou Mock
-
-#### 3. Indicador de Fonte de Dados
-
-No header do dashboard, apos "Atualizado:", aparece um badge colorido:
-- **Azul (Cache)**: Dados do cache local
-- **Verde (Planilha)**: Dados do Google Sheets
-- **Amarelo (N8N)**: Dados do webhook em tempo real
-- **Cinza (Mock)**: Dados simulados (fallback)
-
-#### 4. Estrutura da Planilha (V2.2 - Atualizada 2026-02-07)
-
-A planilha `19-01_Dashboard_Defenz` tem 3 abas:
-
-**Aba `metricas`** (5 linhas, 1 por periodo):
-
-| Coluna | Descricao |
-|--------|-----------|
-| data_coleta | Data da coleta (YYYY-MM-DD) |
-| periodo | Identificador: `hoje`, `7d`, `15d`, `30d`, `mes` |
-| data_inicio | Inicio do periodo |
-| data_fim | Fim do periodo |
-| ligacoes | Total de ligacoes (Zoho Calls) |
-| ligacoes_atendidas | Ligacoes atendidas |
-| taxa_conectividade | Percentual (0-100) |
-| emails | Emails enviados pelo Apollo (APENAS Apollo no V1) |
-| reunioes | Reunioes de pipeline (filtradas por `<>` no Subject) |
-| apresentacoes | Deals com [APRESENTACAO] |
-| propostas | Deals com Stage "Proposta Enviada" ou [PROPOSTA] |
-| deals_ativos | Quantidade de deals ativos |
-| deals_fechados | Quantidade fechados no periodo |
-| valor_pipeline | Soma dos deals ativos |
-| valor_fechado | Soma dos fechados |
-| ultimo_cliente_nome | Nome do ultimo cliente |
-| ultimo_cliente_origem | Origem do ultimo cliente |
-| ultimo_cliente_valor | Valor do ultimo cliente |
-| **comissao_pipeline** | Soma das comissoes dos deals ativos (V2.2) |
-| **comissao_fechado** | Soma das comissoes dos deals fechados no periodo (V2.2) |
-| **ticket_medio** | Valor medio por deal (V2.2) |
-| **win_rate** | % deals ganhos / (ganhos + perdidos) (V2.2) |
-
-**Aba `deals_ativos`** (snapshot de todos os deals ativos):
-
-| Coluna | Descricao |
-|--------|-----------|
-| id | ID do deal no Zoho |
-| data | Data da coleta |
-| nome | Nome do deal |
-| empresa | Account_Name do Zoho |
-| stage | Stage atual do deal |
-| valor | Valor bruto (Amount) |
-| origem | Lead_Source crua do Zoho |
-| categoria | securisoft, direto, ou parceiro |
-| comissao_valor | Valor da comissao Defenz |
-| modified_time | Data ultima modificacao (Zoho) (V3.0) |
-| days_in_stage | Dias no stage atual (V3.0) |
-| last_activity_date | Data da ultima atividade (V3.0) |
-| last_activity_type | call/email/meeting/none (V3.0) |
-
-**Aba `clientes_fechados`** (todos os deals com Stage "Fechado Ganho"):
-
-| Coluna | Descricao |
-|--------|-----------|
-| id | ID do deal no Zoho |
-| data | Closing_Date |
-| nome | Nome do deal |
-| empresa | Account_Name do Zoho |
-| valor | Valor bruto (Amount) |
-| **origem** | Lead_Source crua do Zoho (V2.2) |
-| **categoria** | securisoft, direto, ou parceiro (V2.2) |
-| comissao_valor | Valor da comissao Defenz |
-
-**Aba `atividades`** (atividades correlacionadas a deals, V3.0):
-
-| Coluna | Descricao |
-|--------|-----------|
-| deal_id | ID do deal Zoho (ou 'unmatched') |
-| deal_nome | Nome do deal/contato |
-| tipo | `call`, `email`, `meeting` |
-| data | YYYY-MM-DD |
-| descricao | Descricao da atividade |
-| vendedor | Quem realizou |
-
-> **Planilha alimentada automaticamente pelo N8N** (workflow ativo, Cron 6am/18pm + webhook). Agora com 4 abas.
-
-#### 5. Decisoes de Produto V1 (Dashboard Executivo)
-
-| Metrica | Fonte | Filtro | Nota |
-|---------|-------|--------|------|
-| **Ligacoes** | Zoho Calls | `Call_Start_Time` no periodo | Atendidas = Subject contem "atendida" |
-| **Emails** | Apollo.io | `completed_at` no periodo | **Apenas enviados.** Microsoft Emails fora do V1 |
-| **Reunioes** | Microsoft Calendar | **Subject contem `<>`** | Padrao: `[Quem] <> [Cliente]` |
-| **Apresentacoes** | Zoho Deals | `Resultados` contem `[APRESENTACAO]` | |
-| **Propostas** | Zoho Deals | Stage = "Proposta Enviada" OU `[PROPOSTA]` | |
-| **Deals** | Zoho Deals | Stage para ativo/fechado | |
-
-**Convencao de Reunioes:** Para aparecer no funil, o assunto do evento no Outlook deve conter `<>`. Exemplos:
-- `BitDefender <> Consube Agropecuaria` (SecuriSoft agenda)
-- `Defenz <> FDC - Fundacao Dom Cabral` (equipe Defenz agenda)
-
-#### 6. Logica de Comissao (V2.2 - 2026-02-07)
+### Logica de Comissao
 
 A comissao da Defenz depende da origem do deal (`Lead_Source` no Zoho):
 
@@ -374,88 +280,35 @@ A comissao da Defenz depende da origem do deal (`Lead_Source` no Zoho):
 | `parceiro` (generico) | parceiro | **43%** |
 | qualquer outra coisa (default) | direto | **58%** |
 
-A funcao `classifyOrigin()` no Code Node `Consolidar` do N8N aplica essas regras.
+A funcao `classifyOrigin()` no Code Node `Consolidar` do N8N aplica essas regras. Se um deal esta classificado errado, corrigir o `Lead_Source` no Zoho CRM.
 
-**IMPORTANTE**: Se um deal esta classificado errado, corrigir o `Lead_Source` no Zoho CRM. A classificacao e automatica a partir da proxima execucao do workflow.
+### Convencao de Reunioes
 
-#### 7. Dashboard Executivo (V2.2 - 2026-02-07)
+Para aparecer no funil, o assunto do evento no Outlook deve conter `<>` (ex: `Defenz <> FDC`).
 
-6 cards em grid 3x2:
+### Fontes de Dados por Metrica
 
-| Card | Valor Principal | Subtexto |
-|------|----------------|----------|
-| Comissao Pipeline | `comissao_pipeline` em BRL | X deals ativos — Pipeline: valor_pipeline |
-| Comissao Ganha | `comissao_fechado` em BRL | X negocios ganhos — Total: valor_fechado |
-| Win Rate | `win_rate%` | X ganhos de Y total |
-| Ticket Medio | `ticket_medio` em BRL | Valor medio por deal |
-| Taxa Conectividade | `taxa_conectividade%` | X de Y ligacoes |
-| Ultimo Fechamento | valor do ultimo cliente | Nome do cliente |
+| Metrica | Fonte | Filtro |
+|---------|-------|--------|
+| Ligacoes | Callbox (telefonia real) | periodo |
+| Emails | Apollo.io | `completed_at` no periodo |
+| Reunioes | Microsoft Calendar | Subject contem `<>` |
+| Apresentacoes | Zoho Deals | `Resultados` contem `[APRESENTACAO]` |
+| Propostas | Zoho Deals | Stage = "Proposta Enviada" OU `[PROPOSTA]` |
 
-**DealRow**: Badge colorido por categoria (`SS 5%` vermelho, `Direto 58%` verde, `Parceiro 43%` azul). Comissao como valor principal, valor bruto como subtexto.
+### Caching Strategy
 
-#### 8. Fluxo de Dados V3.0
+- **Server**: In-memory cache 30min TTL on all API routes (except export)
+- **Client**: sessionStorage cache 30min TTL via `src/lib/cache.ts`
+- **Data source badge**: Azul (Cache), Verde (Planilha), Amarelo (N8N), Cinza (Mock)
+- **Fetch cascade**: Cache local → Google Sheets → N8N webhook → Mock data
 
-```
-N8N Workflow: QjnzGicZHIPBNN1g (20 nos, ATIVO)
-Triggers: Cron 6am/18pm + Webhook POST + Manual
-    |
-    +-- Definir periodo (30 dias de lookback)
-    +-- Apollo Emails → Agg Apollo (paginacao)
-    +-- Zoho Deals (todos, com Lead_Source + Modified_Time)
-    +-- Zoho Calls → Agg Calls (paginacao)
-    +-- Microsoft Reunioes (Calendar)
-    +-- Consolidar V3.0:
-    |   - classifyOrigin() por Lead_Source
-    |   - 5 periodos (hoje, 7d, 15d, 30d, mes)
-    |   - Comissao por deal + agregados
-    |   - Win rate (fechados vs perdidos)
-    |   - Ticket medio
-    |   - Correlacao atividades↔deals (calls via Contact_Name, meetings via <>)
-    |   - days_in_stage, last_activity_date, last_activity_type
-    |   - atividades[] array
-    +-- Split → Sheets Metricas (appendOrUpdate por periodo)
-    +-- Split → Sheets Deals Ativos (appendOrUpdate por id)
-    +-- Split → Sheets Clientes Fechados (appendOrUpdate por id)
-    +-- Split Atividades → Sheets Atividades (appendOrUpdate por deal_id+data+tipo)
-    +-- Respond Webhook (JSON completo)
+### Google Sheets Structure
 
-Dashboard (Multi-page)
-    |
-    +-- / (Executivo)
-    |   +-- 1. Cache local (sessionStorage, 30min)
-    |   +-- 2. Google Sheets (/api/dashboard-sheets)
-    |   +-- 3. Fallback N8N (/api/dashboard)
-    |   +-- 4. Fallback Mock data
-    |
-    +-- /operacional
-        +-- 1. Cache local (sessionStorage, 30min)
-        +-- 2. Google Sheets (/api/operational) → deals_ativos + atividades
-```
+Planilha `19-01_Dashboard_Defenz` com 7+ abas (metricas, deals_ativos, clientes_fechados, atividades, classificacao_ia, agenda, ligacoes_raw, emails_raw, leads_completo). Alimentada pelo N8N (Cron 6am/18pm). Schema detalhado em `docs/NOVA_ARQUITETURA_N8N.md`.
 
-#### 9. Estado Atual e Proximos Passos
+### N8N Workflow
 
-**Concluido V3.0:**
-- [x] Planilha com 4 abas (metricas, deals_ativos, clientes_fechados, atividades)
-- [x] Workflow N8N V3.0 (20 nos) com correlacao de atividades, aging, operational data
-- [x] Multi-page: Executivo (`/`), Operacional (`/operacional`), stubs (`/atividade`, `/metas`)
-- [x] Dashboard.tsx monolito decomposto em 15+ modulos
-- [x] Route group com navbar compartilhada + DateRangeProvider
-- [x] Pagina operacional com deal pipeline, aging badges, stale alerts, activity timeline
-- [x] Removido coluna legada `id_data` do workflow N8N
-- [x] Adicionado `Modified_Time` ao Zoho Deals query
-
-**Pendente / Proximas iteracoes:**
-- [ ] Tornar planilha publica para leitura (necessario para API Sheets funcionar sem OAuth)
-- [ ] Revisar Lead_Source dos deals no Zoho (ex: JRC Law esta como "Parceiro" mas deveria ser "Direto")
-- [ ] Melhorar campo `empresa` (Account_Name vazio no Zoho → "-")
-- [ ] Deals inativos nao sao removidos da aba deals_ativos (limitacao)
-- [ ] V4.0: Dashboard atividade por vendedor (`/atividade`)
-- [ ] V5.0: Dashboard TV com metas semanais (`/metas`)
-
-#### Documentacao Detalhada
-
-Ver arquivo `docs/NOVA_ARQUITETURA_N8N.md` para:
-- Estrutura completa da planilha
-- Codigo do Code Node do N8N com filtros
-- Convencao de reunioes `<>`
-- Fluxo completo dos nos do N8N
+- ID: `QjnzGicZHIPBNN1g` | 41 nos | Cron 6am/18pm + Webhook + Manual
+- Fontes: Zoho CRM (Deals, Leads), Apollo (Emails), Callbox (Calls), Microsoft Calendar
+- Detalhes em `docs/NOVA_ARQUITETURA_N8N.md`

@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  Users, Zap, DollarSign, Trophy, Percent, BarChart3,
+  Phone, Calendar, Presentation, FileText, Trophy,
+  DollarSign, Percent, BarChart3,
   AlertTriangle, RefreshCcw, Loader2, UserCheck, Download
 } from 'lucide-react';
 import { useState } from 'react';
@@ -9,8 +10,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DealsTable } from '@/components/dashboard/DealsTable';
-import { PartnersCard } from '@/components/dashboard/PartnersCard';
-import { LastClientCard } from '@/components/dashboard/LastClientCard';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { MagicCard } from '@/components/ui/MagicCard';
 import { DailyEffortChart } from '@/components/operational/charts/DailyEffortChart';
@@ -186,32 +185,77 @@ export const ExecutiveDashboard = () => {
           </div>
         </div>
 
-        {/* Hero Card: Comissão Ganha */}
-        <div>
+        {/* HERO: Funil de Vendas (full-width) */}
+        <div className="h-[420px]">
+          <FunnelChart data={funnelData} />
+        </div>
+
+        {/* Drill-down: Cards por estágio do funil */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard
+            loading={loading}
+            icon={Phone}
+            title="Ligacoes"
+            value={data ? String(data.ligacoes) : "-"}
+            subtext={data ? `${data.taxa_conectividade}% atendidas (${data.ligacoes_atendidas} de ${data.ligacoes})` : ""}
+            tooltip="Total de ligacoes realizadas no periodo. Taxa = atendidas / total."
+          />
+          <StatCard
+            loading={loading}
+            icon={Calendar}
+            title="Reunioes"
+            value={data ? String(data.reunioes) : "-"}
+            subtext={data && data.ligacoes > 0 ? `Conv: ${Math.round((data.reunioes / data.ligacoes) * 100)}% das ligacoes` : ""}
+            tooltip="Reunioes com <> no assunto do Outlook. Conversao = reunioes / ligacoes."
+          />
+          <StatCard
+            loading={loading}
+            icon={Presentation}
+            title="Apresentacoes"
+            value={data ? String(data.apresentacoes) : "-"}
+            subtext={data && data.reunioes > 0 ? `Conv: ${Math.round((data.apresentacoes / data.reunioes) * 100)}% das reunioes` : ""}
+            tooltip="Deals com [APRESENTACAO] no campo Resultados. Conversao = apresentacoes / reunioes."
+          />
+          <StatCard
+            loading={loading}
+            icon={FileText}
+            title="Propostas"
+            value={data ? String(data.propostas) : "-"}
+            subtext={data ? `Pipeline: ${formatCurrency(data.valor_pipeline)}` : ""}
+            highlight={true}
+            tooltip="Deals com Stage 'Proposta Enviada' ou [PROPOSTA]. Pipeline = soma dos valores."
+          />
+          <StatCard
+            loading={loading}
+            icon={Trophy}
+            title="Fechados"
+            value={data ? String(data.deals_fechados) : "-"}
+            subtext={data ? `Comissao: ${formatCurrency(data.comissao_fechado)}` : ""}
+            highlight={true}
+            tooltip="Deals fechados como ganhos no periodo. Comissao calculada por categoria."
+          />
+        </div>
+
+        {/* Resultado Financeiro: 4 cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             loading={loading}
             icon={Trophy}
             title="Comissao Ganha"
             value={data ? formatCurrency(data.comissao_fechado) : "-"}
-            subtext={`${data?.deals_fechados || 0} negocios ganhos — Total: ${data ? formatCurrency(data.valor_fechado) : '-'}`}
+            subtext={`${data?.deals_fechados || 0} negocios ganhos`}
             highlight={true}
-            heroSize={true}
             trend={hasComparison ? trends.comissao_fechado as 'up' | 'down' | undefined : undefined}
-            comparisonLine={buildComparisonLine('comissao_fechado', 'currency')}
-            tooltip="Soma das comissoes dos deals fechados no periodo selecionado."
+            comparisonLine={buildComparisonLine('comissao_fechado', 'currency', true)}
+            tooltip="Soma das comissoes dos deals fechados no periodo."
           />
-        </div>
-
-        {/* Support Cards: 5 cards in a row */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
             loading={loading}
             icon={DollarSign}
             title="Pipeline"
             value={data ? formatCurrency(data.comissao_pipeline) : "-"}
-            subtext={`${data?.deals_pipeline || 0} deals c/ proposta — ${data ? formatCurrency(data.valor_pipeline) : '-'}`}
-            highlight={true}
-            tooltip="Comissao dos deals com proposta na rua (Proposta Enviada, Em negociacao, Negociacao/Revisao). Taxas: Direto 58%, Parceiro 43%, SecuriSoft 5%."
+            subtext={`${data?.deals_pipeline || 0} deals c/ proposta`}
+            tooltip="Comissao dos deals com proposta na rua. Taxas: Direto 58%, Parceiro 43%, SS 5%."
           />
           <StatCard
             loading={loading}
@@ -236,25 +280,6 @@ export const ExecutiveDashboard = () => {
             trend={hasComparison ? trends.ticket_medio as 'up' | 'down' | undefined : undefined}
             comparisonLine={buildComparisonLine('ticket_medio', 'currency', true)}
             tooltip="Valor medio por deal fechado no periodo (valor total / quantidade)."
-          />
-          <StatCard
-            loading={loading}
-            icon={Zap}
-            title="Conectividade"
-            value={data ? `${data.taxa_conectividade}%` : "-"}
-            subtext={`${data?.ligacoes_atendidas || 0} de ${data?.ligacoes || 0} ligacoes`}
-            trend={hasComparison ? trends.taxa_conectividade as 'up' | 'down' | undefined : undefined}
-            comparisonLine={buildComparisonLine('taxa_conectividade', 'percent', true)}
-            tooltip="Percentual de ligacoes atendidas sobre o total de ligacoes realizadas."
-          />
-          <StatCard
-            loading={loading}
-            icon={Users}
-            title="Ultimo Fechamento"
-            value={data?.ultimo_cliente.valor ? formatCurrency(data.ultimo_cliente.valor) : "-"}
-            subtext={data?.ultimo_cliente.nome || "Nenhum recente"}
-            highlight={true}
-            tooltip="Valor do deal mais recente fechado como ganho no periodo."
           />
         </div>
 
@@ -281,19 +306,6 @@ export const ExecutiveDashboard = () => {
             />
           </div>
         )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Funnel Chart Section */}
-          <div className="lg:col-span-2 h-[500px]">
-            <FunnelChart data={funnelData} />
-          </div>
-
-          {/* Side Column: Partners & Executive Summary */}
-          <div className="space-y-6">
-            <PartnersCard partners={data?.parceiros} loading={loading} />
-            <LastClientCard client={data?.ultimo_cliente} loading={loading} />
-          </div>
-        </div>
 
         {/* Daily Effort Chart */}
         <MagicCard className="border-slate-200/60 bg-white/60 overflow-hidden">
