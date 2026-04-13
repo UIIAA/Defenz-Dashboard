@@ -156,11 +156,14 @@ export function computeMetrics(
     ? Math.round((closedWonInRange.length / totalClosed) * 100)
     : 0;
 
-  // Decision maker contacts (from IA classification — snapshot)
-  const contatos_decisor = classificacoes.filter(
+  // Decision maker contacts (filtered by data_classificacao)
+  const classificacoesInRange = classificacoes.filter(
+    c => dateInRange(c.data_classificacao, start, end)
+  );
+  const contatos_decisor = classificacoesInRange.filter(
     c => String(c.nivel_maximo || '').toLowerCase() === 'decisor'
   ).length;
-  const contatos_decisor_info = classificacoes.filter(
+  const contatos_decisor_info = classificacoesInRange.filter(
     c => ['decisor', 'tecnico'].includes(String(c.nivel_maximo || '').toLowerCase())
   ).length;
 
