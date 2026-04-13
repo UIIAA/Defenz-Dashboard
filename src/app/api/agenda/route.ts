@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = await fetchFromSheets("agenda_prospeccao");
+    const rows = await fetchFromSheets("agenda");
     const hoje = new Date().toISOString().split('T')[0];
     const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
 

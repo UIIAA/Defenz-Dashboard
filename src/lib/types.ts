@@ -1,3 +1,90 @@
+// Raw data types (from Google Sheets tabs)
+export interface RawCall {
+  call_id?: string;
+  data?: string;
+  hora?: string;
+  agente?: string;
+  destino?: string;
+  duracao_seg?: number | string;
+  status?: string;
+  disposicao?: string;
+}
+
+export interface RawEmail {
+  email_id?: string;
+  data?: string;
+  hora?: string;
+  destinatario?: string;
+  destinatario_nome?: string;
+  assunto?: string;
+  status?: string;
+  sequencia?: string;
+}
+
+export interface RawLead {
+  lead_id?: string;
+  nome?: string;
+  empresa?: string;
+  lead_source?: string;
+  lead_status?: string;
+  telefone?: string;
+  email?: string;
+  resultados?: string;
+  created_time?: string;
+  modified_time?: string;
+  owner?: string;
+}
+
+export interface RawClassificacao {
+  lead_id?: string;
+  lead_name?: string;
+  data_classificacao?: string;
+  nivel_maximo?: string;
+  passou_secretaria?: string;
+  resultado_principal?: string;
+  concorrente?: string;
+  renovacao_concorrente?: string;
+  toques_estimados?: number | string;
+  pessoa_contactada?: string;
+  cargo_estimado?: string;
+  resumo?: string;
+}
+
+export interface RawDeal {
+  id?: string;
+  nome?: string;
+  empresa?: string;
+  stage?: string;
+  valor?: number | string;
+  lead_source?: string;
+  categoria?: string;
+  comissao_valor?: number | string;
+  created_time?: string;
+  modified_time?: string;
+  resultados?: string;
+}
+
+export interface ComputedMetrics {
+  ligacoes: number;
+  ligacoes_atendidas: number;
+  taxa_conectividade: number;
+  emails: number;
+  reunioes: number;
+  apresentacoes: number;
+  propostas: number;
+  deals_novos: number;
+  deals_fechados: number;
+  deals_pipeline: number;
+  valor_pipeline: number;
+  valor_fechado: number;
+  comissao_pipeline: number;
+  comissao_fechado: number;
+  ticket_medio: number;
+  win_rate: number;
+  contatos_decisor: number;
+  contatos_decisor_info: number;
+}
+
 export interface Client {
   nome: string;
   origem: string;

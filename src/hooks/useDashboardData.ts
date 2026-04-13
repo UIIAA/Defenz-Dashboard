@@ -223,7 +223,7 @@ export function useDashboardData(dateRange: string) {
   };
 
   useEffect(() => {
-    fetchData(dateRange);
+    fetchData(dateRange, true);
   }, [dateRange]);
 
   const funnelData = useMemo(() => {

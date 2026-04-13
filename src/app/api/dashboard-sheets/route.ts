@@ -1,78 +1,87 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets } from "@/lib/sheets";
+import { computeMetrics, getLastClosedClient, isPipeline, isClosedWon } from "@/lib/metrics";
+import type { RawDeal, RawCall, RawEmail, RawClassificacao } from "@/lib/types";
 
 // Cache em memória (por instância do servidor)
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
 
-// Mapear período do Dashboard para período da planilha
-type PeriodoResult =
-  | { custom: false; key: string }
-  | { custom: true; key: string; dataInicio: string; dataFim: string };
+// Compute date range from period key
+function getDateRange(periodo: string): { start: string; end: string; label: string } {
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const todayStr = fmt(today);
 
-function mapPeriodo(range: string): PeriodoResult {
-  if (range.startsWith("custom:")) {
-    const parts = range.split(":");
-    const inicio = parts[1] ?? "";
-    const fim = parts[2] ?? "";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}-\d{2}$/.test(fim)) {
-      // Pick best base period for activity metrics approximation
-      const diffDays = Math.round(
-        (new Date(fim).getTime() - new Date(inicio).getTime()) / 86_400_000
-      );
-      const base = diffDays <= 1 ? "hoje" : diffDays <= 7 ? "7d" : diffDays <= 15 ? "15d" : "30d";
-      return { custom: true, key: base, dataInicio: inicio, dataFim: fim };
+  switch (periodo) {
+    case 'today': {
+      return { start: todayStr, end: todayStr, label: todayStr };
+    }
+    case '7d': {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 7);
+      return { start: fmt(start), end: todayStr, label: 'Últimos 7 dias' };
+    }
+    case '15d': {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 15);
+      return { start: fmt(start), end: todayStr, label: 'Últimos 15 dias' };
+    }
+    case '30d': {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 30);
+      return { start: fmt(start), end: todayStr, label: 'Últimos 30 dias' };
+    }
+    case 'month': {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { start: fmt(start), end: todayStr, label: 'Este Mês' };
+    }
+    case 'alltime': {
+      return { start: '2020-01-01', end: todayStr, label: 'All Time' };
+    }
+    default: {
+      // Custom range: "custom:YYYY-MM-DD:YYYY-MM-DD"
+      if (periodo.startsWith('custom:')) {
+        const parts = periodo.split(':');
+        const inicio = parts[1] ?? '';
+        const fim = parts[2] ?? '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}-\d{2}$/.test(fim)) {
+          const fmtDate = (iso: string) => {
+            const [, m, d] = iso.split('-');
+            return `${d}/${m}`;
+          };
+          return { start: inicio, end: fim, label: `${fmtDate(inicio)} - ${fmtDate(fim)}` };
+        }
+      }
+      return { start: todayStr, end: todayStr, label: todayStr };
     }
   }
-  if (range === "today") return { custom: false, key: "hoje" };
-  if (range === "7d") return { custom: false, key: "7d" };
-  if (range === "15d") return { custom: false, key: "15d" };
-  if (range === "30d") return { custom: false, key: "30d" };
-  if (range === "month") return { custom: false, key: "mes" };
-  if (range === "alltime") return { custom: false, key: "alltime" };
-  return { custom: false, key: "hoje" };
 }
 
 // Período de referência para comparação temporal
-function getReferencePeriod(key: string): string | null {
+function getReferencePeriod(periodo: string): string | null {
   const map: Record<string, string> = {
-    hoje: "7d",
-    "7d": "30d",
-    "15d": "30d",
-    "30d": "mes",
+    today: '7d',
+    '7d': '30d',
+    '15d': '30d',
+    '30d': 'alltime',
   };
-  return map[key] ?? null;
-}
-
-function getDaysInPeriod(key: string): number {
-  const map: Record<string, number> = {
-    hoje: 1,
-    "7d": 7,
-    "15d": 15,
-    "30d": 30,
-    mes: 30,
-  };
-  return map[key] ?? 30;
+  return map[periodo] ?? null;
 }
 
 export async function GET(request: NextRequest) {
-  // Verificar sessão
   const session = await verifySession(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
-  const periodo = searchParams.get("periodo") || "hoje";
-  const periodoResult = mapPeriodo(periodo);
+  const periodo = searchParams.get("periodo") || "today";
 
   // Verificar cache
-  const cacheKey = periodoResult.custom
-    ? `metricas_custom_${(periodoResult as any).dataInicio}_${(periodoResult as any).dataFim}`
-    : `metricas_${periodoResult.key}`;
+  const cacheKey = `metrics_v5_${periodo}`;
   const cached = memoryCache.get(cacheKey);
-
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return NextResponse.json({
       ...cached.data,
@@ -82,144 +91,108 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Buscar da aba "metricas"
-    const metricas = await fetchFromSheets("metricas");
-
-    // Buscar deals ativos e clientes fechados (needed for alltime + standard)
-    const [dealsAtivos, clientesFechados] = await Promise.all([
-      fetchFromSheets("deals_ativos"),
-      fetchFromSheets("clientes_fechados")
+    // Fetch raw data from 4 tabs in parallel
+    const [deals, calls, emails, classificacoes] = await Promise.all([
+      fetchFromSheets("deals") as Promise<RawDeal[]>,
+      fetchFromSheets("ligacoes") as Promise<RawCall[]>,
+      fetchFromSheets("emails") as Promise<RawEmail[]>,
+      fetchFromSheets("classificacao_ia") as Promise<RawClassificacao[]>,
     ]);
 
-    // Filtrar pela linha do período solicitado (pegar a mais recente)
-    const metricasPeriodo = metricas
-      .filter((row: any) => row.periodo === periodoResult.key)
-      .sort((a: any, b: any) =>
-        new Date(b.data_coleta).getTime() - new Date(a.data_coleta).getTime()
-      );
+    const dateRange = getDateRange(periodo);
+    const metrics = computeMetrics(deals, calls, emails, classificacoes, dateRange);
 
-    const metrica = metricasPeriodo[0];
+    // Get last closed client
+    const ultimoCliente = getLastClosedClient(deals, dateRange);
 
-    if (!metrica) {
-      return NextResponse.json(
-        { error: "Dados não encontrados para o período", periodo: periodoResult.key },
-        { status: 404 }
-      );
-    }
+    // Separate deals for frontend
+    const dealsAtivos = deals
+      .filter(d => !isClosedWon(String(d.stage || '')) && isPipeline(String(d.stage || '')))
+      .map(d => ({
+        id: String(d.id || ''),
+        id_data: String(d.id || ''),
+        nome: String(d.nome || ''),
+        empresa: (String(d.empresa || '').trim().length > 0) ? String(d.empresa || '') : '-',
+        stage: String(d.stage || ''),
+        valor: Number(d.valor) || 0,
+        origem: String(d.lead_source || ''),
+        categoria: String(d.categoria || ''),
+        comissao_valor: Number(d.comissao_valor) || 0,
+        data: String(d.created_time || '').slice(0, 10),
+        modified_time: String(d.modified_time || ''),
+      }));
 
-    // For custom ranges, recompute deal metrics from raw clientes_fechados
-    let dealsFechadosCount = Number(metrica.deals_fechados) || 0;
-    let valorFechado = Number(metrica.valor_fechado) || 0;
-    let comissaoFechado = Number(metrica.comissao_fechado) || 0;
-    let ticketMedio = Number(metrica.ticket_medio) || 0;
-    let ultimoCliente: { nome: string; origem: string; valor: number; data: string } | null =
-      metrica.ultimo_cliente_nome ? {
-        nome: metrica.ultimo_cliente_nome,
-        origem: metrica.ultimo_cliente_origem || "N/A",
-        valor: Number(metrica.ultimo_cliente_valor) || 0,
-        data: metrica.data_coleta
-      } : null;
-    let periodoLabel = metrica.periodo === "hoje" ? metrica.data_coleta :
-                       metrica.periodo === "mes" ? "Este Mês" :
-                       metrica.periodo === "alltime" ? "All Time" :
-                       `Últimos ${metrica.periodo.replace("d", "")} dias`;
+    const clientesFechados = deals
+      .filter(d => isClosedWon(String(d.stage || '')))
+      .map(d => ({
+        id: String(d.id || ''),
+        id_data: String(d.id || ''),
+        nome: String(d.nome || ''),
+        empresa: (String(d.empresa || '').trim().length > 0) ? String(d.empresa || '') : '-',
+        stage: String(d.stage || ''),
+        valor: Number(d.valor) || 0,
+        origem: String(d.lead_source || ''),
+        categoria: String(d.categoria || ''),
+        comissao_valor: Number(d.comissao_valor) || 0,
+        data: String(d.modified_time || '').slice(0, 10),
+        modified_time: String(d.modified_time || ''),
+      }));
 
-    if (periodoResult.custom) {
-      const { dataInicio, dataFim } = periodoResult;
-
-      // Filter clientes_fechados by custom date range
-      const fechadosNoRange = (clientesFechados || []).filter((d: any) => {
-        const date = String(d.data || "").slice(0, 10);
-        return date >= dataInicio && date <= dataFim;
-      });
-
-      dealsFechadosCount = fechadosNoRange.length;
-      valorFechado = fechadosNoRange.reduce((sum: number, d: any) => sum + (Number(d.valor) || 0), 0);
-      comissaoFechado = fechadosNoRange.reduce((sum: number, d: any) => sum + (Number(d.comissao_valor) || 0), 0);
-      ticketMedio = dealsFechadosCount > 0 ? Math.round(valorFechado / dealsFechadosCount) : 0;
-
-      // Most recent closed deal in range
-      const sorted = [...fechadosNoRange].sort((a: any, b: any) =>
-        String(b.data || "").localeCompare(String(a.data || ""))
-      );
-      if (sorted.length > 0) {
-        const last = sorted[0];
-        ultimoCliente = {
-          nome: last.nome || "N/A",
-          origem: last.origem || "N/A",
-          valor: Number(last.valor) || 0,
-          data: String(last.data || "").slice(0, 10)
-        };
-      } else {
-        ultimoCliente = null;
-      }
-
-      // Format period label as "dd/MM - dd/MM"
-      const fmtDate = (iso: string) => {
-        const [, m, d] = iso.split("-");
-        return `${d}/${m}`;
-      };
-      periodoLabel = `${fmtDate(dataInicio)} - ${fmtDate(dataFim)}`;
-    }
-
-    // Buscar período de referência para comparação temporal
+    // Build comparison data
     let comparison: any = undefined;
-    const refKey = getReferencePeriod(periodoResult.key);
-    if (refKey && !periodoResult.custom) {
-      const refRow = metricas
-        .filter((row: any) => row.periodo === refKey)
-        .sort((a: any, b: any) =>
-          new Date(b.data_coleta).getTime() - new Date(a.data_coleta).getTime()
-        )[0];
-
-      if (refRow) {
-        comparison = {
-          periodo: refKey,
-          dias: getDaysInPeriod(refKey),
-          comissao_fechado: Number(refRow.comissao_fechado) || 0,
-          deals_fechados: Number(refRow.deals_fechados) || 0,
-          ligacoes: Number(refRow.ligacoes) || 0,
-          emails: Number(refRow.emails) || 0,
-          reunioes: Number(refRow.reunioes) || 0,
-          taxa_conectividade: Number(refRow.taxa_conectividade) || 0,
-          win_rate: Number(refRow.win_rate) || 0,
-          ticket_medio: Number(refRow.ticket_medio) || 0,
-          contatos_decisor: Number(refRow.contatos_decisor) || 0,
-          contatos_decisor_info: Number(refRow.contatos_decisor_info) || 0,
-        };
-      }
+    const refPeriod = getReferencePeriod(periodo);
+    if (refPeriod && !periodo.startsWith('custom:')) {
+      const refRange = getDateRange(refPeriod);
+      const refMetrics = computeMetrics(deals, calls, emails, classificacoes, refRange);
+      const diffDays = Math.round(
+        (new Date(refRange.end).getTime() - new Date(refRange.start).getTime()) / 86400000
+      ) || 1;
+      comparison = {
+        periodo: refPeriod,
+        dias: diffDays,
+        comissao_fechado: refMetrics.comissao_fechado,
+        deals_fechados: refMetrics.deals_fechados,
+        ligacoes: refMetrics.ligacoes,
+        emails: refMetrics.emails,
+        reunioes: refMetrics.reunioes,
+        taxa_conectividade: refMetrics.taxa_conectividade,
+        win_rate: refMetrics.win_rate,
+        ticket_medio: refMetrics.ticket_medio,
+        contatos_decisor: refMetrics.contatos_decisor,
+        contatos_decisor_info: refMetrics.contatos_decisor_info,
+      };
     }
 
-    // Montar resposta no formato esperado pelo Dashboard
+    // Montar resposta no formato esperado pelo Dashboard (N8nData shape)
     const response: any = {
-      data: metrica.data_coleta,
+      data: new Date().toISOString().split('T')[0],
       hora: new Date().toLocaleTimeString("pt-BR"),
-      periodo: periodoLabel,
-      ligacoes: Number(metrica.ligacoes) || 0,
-      ligacoes_atendidas: Number(metrica.ligacoes_atendidas) || 0,
-      taxa_conectividade: Number(metrica.taxa_conectividade) || 0,
-      emails: Number(metrica.emails) || 0,
-      reunioes: Number(metrica.reunioes) || 0,
-      apresentacoes: Number(metrica.apresentacoes) || 0,
-      propostas: Number(metrica.propostas) || 0,
-      deals_novos: Number(metrica.deals_novos) || Number(metrica.deals_ativos) || 0,
-      deals_fechados: dealsFechadosCount,
-      valor_pipeline: Number(metrica.valor_pipeline) || 0,
-      valor_fechado: valorFechado,
-      comissao_pipeline: Number(metrica.comissao_pipeline) || 0,
-      comissao_fechado: comissaoFechado,
-      ticket_medio: ticketMedio,
-      win_rate: Number(metrica.win_rate) || 0,
-      contatos_decisor: Number(metrica.contatos_decisor) || 0,
-      contatos_decisor_info: Number(metrica.contatos_decisor_info) || 0,
-      deals_pipeline: Number(metrica.deals_pipeline) || 0,
+      periodo: dateRange.label,
+      ligacoes: metrics.ligacoes,
+      ligacoes_atendidas: metrics.ligacoes_atendidas,
+      taxa_conectividade: metrics.taxa_conectividade,
+      emails: metrics.emails,
+      reunioes: metrics.reunioes,
+      apresentacoes: metrics.apresentacoes,
+      propostas: metrics.propostas,
+      deals_novos: metrics.deals_novos,
+      deals_fechados: metrics.deals_fechados,
+      valor_pipeline: metrics.valor_pipeline,
+      valor_fechado: metrics.valor_fechado,
+      comissao_pipeline: metrics.comissao_pipeline,
+      comissao_fechado: metrics.comissao_fechado,
+      ticket_medio: metrics.ticket_medio,
+      win_rate: metrics.win_rate,
+      contatos_decisor: metrics.contatos_decisor,
+      contatos_decisor_info: metrics.contatos_decisor_info,
+      deals_pipeline: metrics.deals_pipeline,
       ultimo_cliente: ultimoCliente,
       parceiros: {
         total: 5,
         lista: ["SecuriSoft", "EXHTech", "AlphaNetworking", "Adriano", "Otavio"]
       },
-      deals_ativos: dealsAtivos || [],
-      clientes_fechados: clientesFechados || [],
+      deals_ativos: dealsAtivos,
+      clientes_fechados: clientesFechados,
       _source: "google_sheets",
     };
 
@@ -228,13 +201,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Salvar no cache
-    memoryCache.set(cacheKey, {
-      data: response,
-      timestamp: Date.now()
-    });
+    memoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
 
     return NextResponse.json(response);
-
   } catch (error) {
     console.error("Error in dashboard-sheets route:", error);
     return NextResponse.json(

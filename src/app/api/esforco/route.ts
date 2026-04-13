@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = await fetchFromSheets("classificacao_esforco");
+    const rows = await fetchFromSheets("classificacao_ia");
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({

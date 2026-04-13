@@ -1,4 +1,4 @@
-import type { EnrichedLead } from './types';
+import type { EnrichedLead, RawLead, RawCall, RawEmail, RawClassificacao } from './types';
 
 /**
  * Normalize phone: strip non-digits, return last N digits.
@@ -28,57 +28,6 @@ const GENERIC_DOMAINS = new Set([
 function extractDomain(email: string): string {
   const at = email.lastIndexOf('@');
   return at > 0 ? email.slice(at + 1).toLowerCase().trim() : '';
-}
-
-interface RawLead {
-  lead_id?: string;
-  nome?: string;
-  empresa?: string;
-  lead_source?: string;
-  lead_status?: string;
-  telefone?: string;
-  email?: string;
-  resultados?: string;
-  created_time?: string;
-  modified_time?: string;
-  owner?: string;
-}
-
-interface RawCall {
-  call_id?: string;
-  data?: string;
-  hora?: string;
-  agente?: string;
-  destino?: string;
-  duracao_seg?: number | string;
-  status?: string;
-  disposicao?: string;
-}
-
-interface RawEmail {
-  email_id?: string;
-  data?: string;
-  hora?: string;
-  destinatario?: string;
-  destinatario_nome?: string;
-  assunto?: string;
-  status?: string;
-  sequencia?: string;
-}
-
-interface RawClassificacao {
-  lead_id?: string;
-  lead_name?: string;
-  data_classificacao?: string;
-  nivel_maximo?: string;
-  passou_secretaria?: string;
-  resultado_principal?: string;
-  concorrente?: string;
-  renovacao_concorrente?: string;
-  toques_estimados?: number | string;
-  pessoa_contactada?: string;
-  cargo_estimado?: string;
-  resumo?: string;
 }
 
 interface LeadAccumulator {

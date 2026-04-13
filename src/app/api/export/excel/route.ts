@@ -3,6 +3,8 @@ import { verifySession } from "@/lib/auth";
 import { fetchFromSheets } from "@/lib/sheets";
 import { correlateLeads } from "@/lib/correlate";
 import { buildExecutiveExcel, computeKPIs } from "@/lib/excel-builder";
+import { computeMetrics } from "@/lib/metrics";
+import type { RawDeal, RawCall, RawEmail, RawClassificacao } from "@/lib/types";
 
 // Rate limit: 1 request per 30s per IP
 const rateLimitMap = new Map<string, number>();
@@ -34,39 +36,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Fetch all 7 sheets in parallel
-    const [
-      leadsCompleto,
-      ligacoesRaw,
-      emailsRaw,
-      classificacoes,
-      metricas,
-      dealsAtivos,
-      clientesFechados,
-    ] = await Promise.all([
-      fetchFromSheets("leads_completo"),
-      fetchFromSheets("ligacoes_raw"),
-      fetchFromSheets("emails_raw"),
-      fetchFromSheets("classificacao_esforco"),
-      fetchFromSheets("metricas"),
-      fetchFromSheets("deals_ativos"),
-      fetchFromSheets("clientes_fechados"),
+    // Fetch all tabs in parallel (new sheet structure)
+    const [leads, calls, emails, classificacoes, deals] = await Promise.all([
+      fetchFromSheets("leads"),
+      fetchFromSheets("ligacoes") as Promise<RawCall[]>,
+      fetchFromSheets("emails") as Promise<RawEmail[]>,
+      fetchFromSheets("classificacao_ia") as Promise<RawClassificacao[]>,
+      fetchFromSheets("deals") as Promise<RawDeal[]>,
     ]);
 
-    // Get latest metricas row (30d or most recent)
-    const metrica30d = metricas
-      .filter((r: any) => r.periodo === "30d")
-      .sort((a: any, b: any) =>
-        String(b.data_coleta || "").localeCompare(String(a.data_coleta || ""))
-      )[0] || metricas[0] || {};
+    // Compute 30d metrics from raw data
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const metrica30d = computeMetrics(deals, calls, emails, classificacoes, {
+      start: thirtyDaysAgo.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0],
+    });
 
     // Correlate leads with calls and emails
-    const enrichedLeads = correlateLeads(
-      leadsCompleto,
-      ligacoesRaw,
-      emailsRaw,
-      classificacoes
-    );
+    const enrichedLeads = correlateLeads(leads, calls, emails, classificacoes);
 
     // Compute KPIs
     const kpis = computeKPIs(enrichedLeads, metrica30d);
@@ -74,8 +63,8 @@ export async function POST(request: NextRequest) {
     // Build Excel
     const buffer = await buildExecutiveExcel(enrichedLeads, metrica30d, kpis);
 
-    const today = new Date().toISOString().split("T")[0];
-    const filename = `defenz_executivo_${today}.xlsx`;
+    const todayStr = today.toISOString().split("T")[0];
+    const filename = `defenz_executivo_${todayStr}.xlsx`;
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
