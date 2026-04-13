@@ -2,25 +2,16 @@
 
 import {
   Phone, Calendar, Presentation, FileText, Trophy,
-  DollarSign, Percent, BarChart3,
-  AlertTriangle, RefreshCcw, Loader2, UserCheck, Download
+  AlertTriangle, RefreshCcw, Loader2, Download
 } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { DealsTable } from '@/components/dashboard/DealsTable';
 import { ErrorState } from '@/components/shared/ErrorState';
-import { MagicCard } from '@/components/ui/MagicCard';
-import { DailyEffortChart } from '@/components/operational/charts/DailyEffortChart';
-import { EsforcoSection } from '@/components/dashboard/EsforcoSection';
-import { AgendaSection } from '@/components/dashboard/AgendaSection';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import { useEsforcoDiario } from '@/hooks/useEsforcoDiario';
-import { useEsforcoData } from '@/hooks/useEsforcoData';
-import { useAgendaData } from '@/hooks/useAgendaData';
 import { useDateRange } from '@/providers/DateRangeProvider';
-import { formatCurrency, getDateBounds } from '@/lib/formatters';
+import { formatCurrency } from '@/lib/formatters';
 import type { DataSource } from '@/lib/types';
 
 const DataSourceBadge = ({ source }: { source: DataSource }) => (
@@ -54,11 +45,6 @@ export const ExecutiveDashboard = () => {
     comparisonValues,
     fetchData,
   } = useDashboardData(dateRange);
-
-  const { data: efpiData, loading: efpiLoading } = useEsforcoDiario();
-  const { data: esforcoData, loading: esforcoLoading } = useEsforcoData();
-  const { data: agendaData, loading: agendaLoading } = useAgendaData();
-  const dateBounds = getDateBounds(dateRange);
 
   const hasComparison = comparisonLabel !== '';
 
@@ -236,110 +222,7 @@ export const ExecutiveDashboard = () => {
           />
         </div>
 
-        {/* Resultado Financeiro: 4 cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            loading={loading}
-            icon={Trophy}
-            title="Comissao Ganha"
-            value={data ? formatCurrency(data.comissao_fechado) : "-"}
-            subtext={`${data?.deals_fechados || 0} negocios ganhos`}
-            highlight={true}
-            trend={hasComparison ? trends.comissao_fechado as 'up' | 'down' | undefined : undefined}
-            comparisonLine={buildComparisonLine('comissao_fechado', 'currency', true)}
-            tooltip="Soma das comissoes dos deals fechados no periodo."
-          />
-          <StatCard
-            loading={loading}
-            icon={DollarSign}
-            title="Pipeline"
-            value={data ? formatCurrency(data.comissao_pipeline) : "-"}
-            subtext={`${data?.deals_pipeline || 0} deals c/ proposta`}
-            tooltip="Comissao dos deals com proposta na rua. Taxas: Direto 58%, Parceiro 43%, SS 5%."
-          />
-          <StatCard
-            loading={loading}
-            icon={Percent}
-            title="Win Rate"
-            value={data ? `${data.win_rate}%` : "-"}
-            subtext={
-              !data?.deals_fechados
-                ? 'Sem fechamentos'
-                : `${data.deals_fechados} ganhos de ${data.deals_fechados + Math.round(data.deals_fechados * (100 - (data.win_rate || 0)) / Math.max(data.win_rate || 1, 1))} total`
-            }
-            trend={hasComparison ? trends.win_rate as 'up' | 'down' | undefined : undefined}
-            comparisonLine={buildComparisonLine('win_rate', 'percent', true)}
-            tooltip="Percentual de deals ganhos sobre o total de finalizados (ganhos + perdidos)."
-          />
-          <StatCard
-            loading={loading}
-            icon={BarChart3}
-            title="Ticket Medio"
-            value={data ? formatCurrency(data.ticket_medio) : "-"}
-            subtext="Valor medio por deal"
-            trend={hasComparison ? trends.ticket_medio as 'up' | 'down' | undefined : undefined}
-            comparisonLine={buildComparisonLine('ticket_medio', 'currency', true)}
-            tooltip="Valor medio por deal fechado no periodo (valor total / quantidade)."
-          />
-        </div>
-
-        {/* Contatos Qualificados — conditional render */}
-        {data && data.contatos_decisor > 0 && (
-          <div className="grid grid-cols-2 lg:grid-cols-2 gap-4 max-w-lg">
-            <StatCard
-              loading={loading}
-              icon={UserCheck}
-              title="Contato c/ Decisor"
-              value={String(data.contatos_decisor)}
-              subtext="Deals marcados com [DECISOR]"
-              tooltip="Quantidade de deals criados no periodo cujo campo Resultados contem a tag [DECISOR]."
-            />
-            <StatCard
-              loading={loading}
-              icon={UserCheck}
-              title="Decisor + Info"
-              value={String(data.contatos_decisor_info)}
-              subtext={data.contatos_decisor > 0
-                ? `${Math.round((data.contatos_decisor_info / data.contatos_decisor) * 100)}% dos contatos c/ decisor`
-                : "Nenhum contato com decisor"}
-              tooltip="Deals com [DECISOR_INFO]: contato com decisor E informacoes tecnicas coletadas."
-            />
-          </div>
-        )}
-
-        {/* Daily Effort Chart */}
-        <MagicCard className="border-slate-200/60 bg-white/60 overflow-hidden">
-          <div className="px-4 pt-4 pb-1">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 font-display">
-              Esforco por Dia
-            </p>
-          </div>
-          <div className="px-4 pb-4">
-            {efpiLoading ? (
-              <div className="h-[260px] bg-slate-50 rounded-xl animate-pulse" />
-            ) : (
-              <div className="h-[260px]">
-                <DailyEffortChart
-                  efpiData={efpiData}
-                  dataInicio={dateBounds.data_inicio}
-                  dataFim={dateBounds.data_fim}
-                />
-              </div>
-            )}
-          </div>
-        </MagicCard>
-
-        {/* Funil de Esforco Comercial (IA) */}
-        <EsforcoSection data={esforcoData} loading={esforcoLoading} />
-
-        {/* Agenda de Prospeccao */}
-        <AgendaSection data={agendaData} loading={agendaLoading} />
-
-        {/* Data Tables Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DealsTable deals={filteredDealsAtivos} type="active" loading={loading} />
-          <DealsTable deals={filteredClientesFechados} type="closed" loading={loading} />
-        </div>
+        {/* TODO: Seções adicionais (financeiro, deals, esforço) serão adicionadas em fases futuras */}
       </motion.div>
     </AnimatePresence>
   );
