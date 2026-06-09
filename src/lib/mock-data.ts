@@ -40,6 +40,7 @@ export const generateMockData = (range: string): N8nData => {
     contatos_decisor: 0,
     contatos_decisor_info: 0,
     deals_pipeline: 3,
+    total_licencas_ativas: 0,
     ultimo_cliente: {
       nome: "Zztech Informatica LTDA",
       origem: "Parceiro SS (SecuriSoft)",

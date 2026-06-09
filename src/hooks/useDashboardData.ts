@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import type { N8nData, DataSource, TrendDirection, ComparisonData } from '@/lib/types';
+import type { N8nData, DataSource, TrendDirection, ComparisonData, CoverageReport, WeeklyBucket, ReceitaPorCanalMetrics } from '@/lib/types';
 import { validateN8nData, checkConsistency } from '@/lib/validation';
 import { getCachedData, setCachedData } from '@/lib/cache';
 import { generateMockData } from '@/lib/mock-data';
@@ -106,6 +106,9 @@ export function useDashboardData(dateRange: string) {
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [dataSource, setDataSource] = useState<DataSource>('cache');
+  const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const [weeklyBuckets, setWeeklyBuckets] = useState<WeeklyBucket[]>([]);
+  const [receitaPorCanal, setReceitaPorCanal] = useState<ReceitaPorCanalMetrics | null>(null);
   const lastFetchRef = useRef<number>(0);
 
   const applyValidatedData = (raw: any) => {
@@ -156,6 +159,15 @@ export function useDashboardData(dateRange: string) {
           if (sheetsData && !sheetsData.error) {
             parsed = sheetsData;
             source = 'sheets';
+            if (sheetsData._coverage) {
+              setCoverage(sheetsData._coverage as CoverageReport);
+            }
+            if (Array.isArray(sheetsData._weekly_buckets)) {
+              setWeeklyBuckets(sheetsData._weekly_buckets as WeeklyBucket[]);
+            }
+            if (sheetsData._receita_por_canal) {
+              setReceitaPorCanal(sheetsData._receita_por_canal as ReceitaPorCanalMetrics);
+            }
           }
         }
       } catch {
@@ -281,6 +293,9 @@ export function useDashboardData(dateRange: string) {
     error,
     warnings,
     dataSource,
+    coverage,
+    weeklyBuckets,
+    receitaPorCanal,
     funnelData,
     filteredDealsAtivos,
     filteredClientesFechados,

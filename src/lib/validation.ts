@@ -29,6 +29,7 @@ export const validateN8nData = (raw: any): N8nData => {
     contatos_decisor: Math.max(0, num(raw.contatos_decisor)),
     contatos_decisor_info: Math.max(0, num(raw.contatos_decisor_info)),
     deals_pipeline: Math.max(0, num(raw.deals_pipeline)),
+    total_licencas_ativas: Math.max(0, num(raw.total_licencas_ativas)),
     ultimo_cliente: {
       nome: str(raw.ultimo_cliente?.nome, 'N/A'),
       origem: str(raw.ultimo_cliente?.origem, 'N/A'),

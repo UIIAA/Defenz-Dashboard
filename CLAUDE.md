@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Defenz Dashboard** is a multi-page sales intelligence platform for the Defenz cybersecurity company. It provides executive metrics (revenue, commissions, funnel) and operational deal tracking (activity timelines, aging, stale alerts). Data is sourced from Google Sheets (populated by an N8N workflow from Zoho CRM, Apollo, and Microsoft Calendar). There is no database.
+**Defenz Dashboard** (V5.7-comissao-owner-canal) is a multi-page sales intelligence platform for the Defenz cybersecurity company. It provides executive metrics (revenue, commissions, funnel) and operational deal tracking (activity timelines, aging, stale alerts). Data is sourced from Google Sheets (populated by an N8N workflow from Zoho CRM, Apollo, Callbox, and Microsoft Calendar). There is no database. See `docs/STATUS_REPORT.md` for stakeholder-facing project status and `docs/ROADMAP.md` for feature roadmap.
 
 ## Key Technologies
 
@@ -126,8 +126,8 @@ The dashboard uses a Next.js App Router route group `(dashboard)` with shared la
 |-------|-----------|-------------|
 | `/` | `ExecutiveDashboard` | Executive metrics: commissions, win rate, funnel, deals tables |
 | `/operacional` | `OperationalDashboard` | Deal pipeline: aging, activity timelines, stale alerts |
-| `/atividade` | Stub | Planned V4.0: Activity per seller |
-| `/metas` | Stub | Planned V5.0: Weekly targets TV dashboard |
+| `/atividade` | Stub | Planned: Activity per seller |
+| `/metas` | Stub | Planned: Weekly targets TV dashboard |
 | `/login` | LoginForm | Password-only auth (outside route group) |
 
 The route group layout wraps all pages with `ErrorBoundary`, `DateRangeProvider`, and `AppNavbar`.
@@ -244,6 +244,8 @@ The application implements several security hardening measures:
 | API Operational (deals+activities) | `src/app/api/operational/route.ts` |
 | API Esforco (IA classification) | `src/app/api/esforco/route.ts` |
 | API Agenda (tasks/prospection) | `src/app/api/agenda/route.ts` |
+| API Série Diária de Ligações | `src/app/api/ligacoes-serie/route.ts` |
+| API Relatório Mensal consolidado | `src/app/api/relatorio-mensal/route.ts` |
 | API Excel export | `src/app/api/export/excel/route.ts` |
 | Logout endpoint | `src/app/api/auth/logout/route.ts` |
 | Route group layout | `src/app/(dashboard)/layout.tsx` |
@@ -264,6 +266,8 @@ The application implements several security hardening measures:
 | Theme / CSS | `src/app/globals.css` |
 | Next.js config (CSP) | `next.config.ts` |
 | Documentacao Arquitetura | `docs/NOVA_ARQUITETURA_N8N.md` |
+| Status do Projeto | `docs/STATUS_REPORT.md` |
+| Roadmap | `docs/ROADMAP.md` |
 
 ---
 
@@ -280,11 +284,17 @@ A comissao da Defenz depende da origem do deal (`Lead_Source` no Zoho):
 | `parceiro` (generico) | parceiro | **43%** |
 | qualquer outra coisa (default) | direto | **58%** |
 
-A funcao `classifyOrigin()` no Code Node `Consolidar` do N8N aplica essas regras. Se um deal esta classificado errado, corrigir o `Lead_Source` no Zoho CRM.
+A funcao `classifyOrigin()` no Code Node `Consolidar` do N8N aplica essas regras (sera migrada para `src/lib/metrics.ts`). Se um deal esta classificado errado, corrigir o `Lead_Source` no Zoho CRM.
 
 ### Convencao de Reunioes
 
-Para aparecer no funil, o assunto do evento no Outlook deve conter `<>` (ex: `Defenz <> FDC`).
+Para aparecer no funil via Microsoft Calendar, o assunto do evento no Outlook deve conter `<>` (ex: `Defenz <> FDC`). Quando a integração com Microsoft Calendar está indisponível (token expirado — P4), a métrica de reuniões é derivada de eventos `[REUNIAO]` no campo `Resultados` dos deals no Zoho CRM (mesma técnica de `extractEventDates` usada para `[APRESENTACAO]` e `[PROPOSTA]`).
+
+**Estratégia de fallback em `computeMetrics` (V5.4+)**:
+1. `dashboard-sheets/route.ts` tenta buscar a aba `reunioes` da planilha via `fetchFromSheetsNullable`
+2. Se a aba existir (tab creada pelo N8N quando Calendar funcionar): usa dados da planilha → `coverage.reunioes.source = 'sheet'`
+3. Se a aba não existir (`null` retornado): deriva de `[REUNIAO]` em `deals.resultados` → `coverage.reunioes.source = 'resultados-proxy'`
+4. `coverage.reunioes.source` exponha a origem para debug e futuros banners de cobertura
 
 ### Fontes de Dados por Metrica
 
@@ -292,7 +302,7 @@ Para aparecer no funil, o assunto do evento no Outlook deve conter `<>` (ex: `De
 |---------|-------|--------|
 | Ligacoes | Callbox (telefonia real) | periodo |
 | Emails | Apollo.io | `completed_at` no periodo |
-| Reunioes | Microsoft Calendar | Subject contem `<>` |
+| Reunioes | aba `reunioes` (se existir) → fallback `[REUNIAO]` em deals.resultados | periodo |
 | Apresentacoes | Zoho Deals | `Resultados` contem `[APRESENTACAO]` |
 | Propostas | Zoho Deals | Stage = "Proposta Enviada" OU `[PROPOSTA]` |
 
@@ -307,8 +317,22 @@ Para aparecer no funil, o assunto do evento no Outlook deve conter `<>` (ex: `De
 
 Planilha `19-01_Dashboard_Defenz` com 7+ abas (metricas, deals_ativos, clientes_fechados, atividades, classificacao_ia, agenda, ligacoes_raw, emails_raw, leads_completo). Alimentada pelo N8N (Cron 6am/18pm). Schema detalhado em `docs/NOVA_ARQUITETURA_N8N.md`.
 
+**Aba `pocs` (schema V1 — a criar):** 13 colunas — `poc_id | deal_id | deal_nome | empresa | data_inicio | data_fim_prevista | data_fim_real | status | descricao | responsavel | resultado | created_time | modified_time`. `status` ∈ `{ativa, convertida, perdida}`. `deal_id` FK para `deals.id` (opcional). Spec: `docs/features/feature-poc-schema.md`. Tipos: `RawPoc`, `Poc`, `PocStatus`, `PocMetrics`, `WeeklyBucket` em `src/lib/types.ts`.
+
 ### N8N Workflow
 
-- ID: `QjnzGicZHIPBNN1g` | 41 nos | Cron 6am/18pm + Webhook + Manual
-- Fontes: Zoho CRM (Deals, Leads), Apollo (Emails), Callbox (Calls), Microsoft Calendar
+- ID: `QjnzGicZHIPBNN1g` | 42 nos | Cron 6am/18pm + Webhook + Manual
+- Fontes: Zoho CRM (Deals, Leads), Apollo (Emails), Callbox (Calls), Microsoft Calendar, Gemini (IA classification)
 - Detalhes em `docs/NOVA_ARQUITETURA_N8N.md`
+
+### Callbox API (Telefonia)
+
+- URL: `https://defenz.callbox.com.br`
+- Login: `POST /callbox-api/login` → token no campo `data` do response body
+- Calls: `POST /callbox-api/relatorios/bilhetagem/tab_chamadas` com Bearer token
+- Body: `{ filter_start_date, filter_end_date, page }` (page no POST body, nao query param)
+- Response: `{ data: { result: [...], pages: N } }` — 1000 records/pagina
+
+### `src/lib/metrics.ts` — Coverage Diagnostics (2026-05-05)
+
+`computeMetrics()` now returns a `coverage: CoverageReport` field with stats per data source (deals, calls, emails, classificacoes). Each source exposes `{ total, in_range, dropped_invalid_date, min_date, max_date }`. The `dateInRange` helper now validates the YYYY-MM-DD format via DATE_RE, so invalid dates are counted rather than silently dropped. Types `CoverageSourceStats` and `CoverageReport` are exported from `src/lib/types.ts`. Consumers of `ComputedMetrics` can use `coverage` to display a data-coverage banner (P10).

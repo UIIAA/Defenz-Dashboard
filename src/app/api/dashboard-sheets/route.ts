@@ -1,8 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
-import { fetchFromSheets } from "@/lib/sheets";
-import { computeMetrics, getLastClosedClient, isPipeline, isClosedWon } from "@/lib/metrics";
-import type { RawDeal, RawCall, RawEmail, RawClassificacao } from "@/lib/types";
+import { fetchFromSheets, fetchTabStrict } from "@/lib/sheets";
+import { computeMetrics, getLastClosedClient, isPipeline, isClosedWon, bucketizeByWeek, computeClientesAtivos, computeRenovacoesVencidas, computePipelineBuckets, computeFaturamentoMensal, computeMrrArr, computeComissaoOwnerCanal, computeReceitaPorCanal } from "@/lib/metrics";
+import type { RawDeal, RawCall, RawEmail, RawClassificacao, RawReuniao, RawLead } from "@/lib/types";
+
+type EmpresaSource = 'deal' | 'nome-derived' | 'leads-tab' | 'unknown';
+
+function resolveEmpresa(
+  deal: RawDeal,
+  leadsByNome: Map<string, string>
+): { empresa: string; empresa_source: EmpresaSource } {
+  // 1. Use deal.empresa if valid
+  const dealEmpresa = String(deal.empresa || '').trim();
+  if (dealEmpresa && dealEmpresa !== '-') {
+    return { empresa: dealEmpresa, empresa_source: 'deal' };
+  }
+
+  // 2. Derive from deal.nome — format "Empresa - Contato" → take first segment
+  const dealNome = String(deal.nome || '').trim();
+  const parts = dealNome.split(' - ');
+  if (parts.length >= 2 && parts[0].trim()) {
+    return { empresa: parts[0].trim(), empresa_source: 'nome-derived' };
+  }
+
+  // 3. Look up contact name in leads tab
+  //    When nome has no ' - ', treat the full nome as the contact key
+  const contactKey = parts.length >= 2
+    ? parts.slice(1).join(' - ').trim()
+    : dealNome;
+  if (contactKey) {
+    const fromLead = leadsByNome.get(contactKey.toLowerCase());
+    if (fromLead) {
+      return { empresa: fromLead, empresa_source: 'leads-tab' };
+    }
+  }
+
+  // 4. Nothing found
+  return { empresa: '(sem empresa)', empresa_source: 'unknown' };
+}
 
 // Cache em memória (por instância do servidor)
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
@@ -91,16 +126,39 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch raw data from 4 tabs in parallel
-    const [deals, calls, emails, classificacoes] = await Promise.all([
+    // Fetch raw data from required tabs + optional reunioes tab in parallel
+    const [deals, calls, emails, classificacoes, reunioesRaw, leads] = await Promise.all([
       fetchFromSheets("deals") as Promise<RawDeal[]>,
       fetchFromSheets("ligacoes") as Promise<RawCall[]>,
       fetchFromSheets("emails") as Promise<RawEmail[]>,
       fetchFromSheets("classificacao_ia") as Promise<RawClassificacao[]>,
+      // Strict: gviz returns sheet 0 (ligacoes) for a non-existent 'reunioes' tab.
+      // 'assunto' is unique to the reunioes schema, so this returns null (→ resultados
+      // proxy fallback) instead of mis-reading ligacoes rows as meetings.
+      fetchTabStrict("reunioes", ["data", "assunto"]) as Promise<RawReuniao[] | null>,
+      fetchFromSheets("leads") as Promise<RawLead[]>,
     ]);
 
+    // Build leads lookup: lead.nome (contact) → lead.empresa
+    const leadsByNome = new Map<string, string>();
+    for (const lead of leads) {
+      const nome = String(lead.nome || '').trim();
+      const emp = String(lead.empresa || '').trim();
+      if (nome && emp && emp !== '-') {
+        leadsByNome.set(nome.toLowerCase(), emp);
+      }
+    }
+
     const dateRange = getDateRange(periodo);
-    const metrics = computeMetrics(deals, calls, emails, classificacoes, dateRange);
+    const metrics = computeMetrics(deals, calls, emails, classificacoes, dateRange, reunioesRaw);
+    const weeklyBuckets = bucketizeByWeek(deals, calls, emails, dateRange, reunioesRaw);
+    const clientesAtivos = computeClientesAtivos(deals);
+    const renovacoesVencidas = computeRenovacoesVencidas(deals);
+    const pipelineBuckets = computePipelineBuckets(deals);
+    const faturamentoMensal = computeFaturamentoMensal(deals);
+    const mrrArr = computeMrrArr(deals);
+    const comissaoOwnerCanal = computeComissaoOwnerCanal(deals);
+    const receitaPorCanal = computeReceitaPorCanal(deals, dateRange);
 
     // Get last closed client
     const ultimoCliente = getLastClosedClient(deals, dateRange);
@@ -108,35 +166,43 @@ export async function GET(request: NextRequest) {
     // Separate deals for frontend
     const dealsAtivos = deals
       .filter(d => !isClosedWon(String(d.stage || '')) && isPipeline(String(d.stage || '')))
-      .map(d => ({
-        id: String(d.id || ''),
-        id_data: String(d.id || ''),
-        nome: String(d.nome || ''),
-        empresa: (String(d.empresa || '').trim().length > 0) ? String(d.empresa || '') : '-',
-        stage: String(d.stage || ''),
-        valor: Number(d.valor) || 0,
-        origem: String(d.lead_source || ''),
-        categoria: String(d.categoria || ''),
-        comissao_valor: Number(d.comissao_valor) || 0,
-        data: String(d.created_time || '').slice(0, 10),
-        modified_time: String(d.modified_time || ''),
-      }));
+      .map(d => {
+        const { empresa, empresa_source } = resolveEmpresa(d, leadsByNome);
+        return {
+          id: String(d.id || ''),
+          id_data: String(d.id || ''),
+          nome: String(d.nome || ''),
+          empresa,
+          empresa_source,
+          stage: String(d.stage || ''),
+          valor: Number(d.valor) || 0,
+          origem: String(d.lead_source || ''),
+          categoria: String(d.categoria || ''),
+          comissao_valor: Number(d.comissao_valor) || 0,
+          data: String(d.created_time || '').slice(0, 10),
+          modified_time: String(d.modified_time || ''),
+        };
+      });
 
     const clientesFechados = deals
       .filter(d => isClosedWon(String(d.stage || '')))
-      .map(d => ({
-        id: String(d.id || ''),
-        id_data: String(d.id || ''),
-        nome: String(d.nome || ''),
-        empresa: (String(d.empresa || '').trim().length > 0) ? String(d.empresa || '') : '-',
-        stage: String(d.stage || ''),
-        valor: Number(d.valor) || 0,
-        origem: String(d.lead_source || ''),
-        categoria: String(d.categoria || ''),
-        comissao_valor: Number(d.comissao_valor) || 0,
-        data: String(d.modified_time || '').slice(0, 10),
-        modified_time: String(d.modified_time || ''),
-      }));
+      .map(d => {
+        const { empresa, empresa_source } = resolveEmpresa(d, leadsByNome);
+        return {
+          id: String(d.id || ''),
+          id_data: String(d.id || ''),
+          nome: String(d.nome || ''),
+          empresa,
+          empresa_source,
+          stage: String(d.stage || ''),
+          valor: Number(d.valor) || 0,
+          origem: String(d.lead_source || ''),
+          categoria: String(d.categoria || ''),
+          comissao_valor: Number(d.comissao_valor) || 0,
+          data: String(d.modified_time || '').slice(0, 10),
+          modified_time: String(d.modified_time || ''),
+        };
+      });
 
     // Build comparison data
     let comparison: any = undefined;
@@ -186,6 +252,7 @@ export async function GET(request: NextRequest) {
       contatos_decisor: metrics.contatos_decisor,
       contatos_decisor_info: metrics.contatos_decisor_info,
       deals_pipeline: metrics.deals_pipeline,
+      total_licencas_ativas: metrics.total_licencas_ativas,
       ultimo_cliente: ultimoCliente,
       parceiros: {
         total: 5,
@@ -194,6 +261,15 @@ export async function GET(request: NextRequest) {
       deals_ativos: dealsAtivos,
       clientes_fechados: clientesFechados,
       _source: "google_sheets",
+      _coverage: metrics.coverage,
+      _weekly_buckets: weeklyBuckets,
+      _clientes_ativos: clientesAtivos,
+      _renovacoes_vencidas: renovacoesVencidas,
+      _pipeline_buckets: pipelineBuckets,
+      _faturamento_mensal: faturamentoMensal,
+      _mrr_arr: mrrArr,
+      _comissao_owner_canal: comissaoOwnerCanal,
+      _receita_por_canal: receitaPorCanal,
     };
 
     if (comparison) {

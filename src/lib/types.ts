@@ -61,7 +61,40 @@ export interface RawDeal {
   comissao_valor?: number | string;
   created_time?: string;
   modified_time?: string;
+  closing_date?: string;
   resultados?: string;
+  // FOOTGUN (feature-016 eval): the public `deals` tab does NOT currently export
+  // these four columns. They compile but read as undefined → metrics that use them
+  // (computeComissaoOwnerCanal, computeRenovacoesVencidas, total_licencas_ativas)
+  // silently produce empty/0. Only populated if a future Fase 2 adds them to the
+  // N8N "Format Deals Raw" export. Do NOT source per-owner data from the deals tab.
+  licencas?: number | string;
+  data_renovacao?: string;  // YYYY-MM-DD — data de renovação do contrato (SS deals)
+  recurring?: string;       // 'true'|'sim'|'1' quando o contrato é recorrente (MRR/ARR)
+  owner?: string;           // responsável pelo deal no Zoho CRM (Deal Owner)
+}
+
+export interface RawReuniao {
+  data?: string;    // YYYY-MM-DD
+  assunto?: string;
+  duracao?: string | number;
+}
+
+export interface CoverageSourceStats {
+  total: number;
+  in_range: number;
+  dropped_invalid_date: number;
+  min_date: string | null;
+  max_date: string | null;
+  source?: 'sheet' | 'resultados-proxy' | 'unavailable';
+}
+
+export interface CoverageReport {
+  deals: CoverageSourceStats;
+  calls: CoverageSourceStats;
+  emails: CoverageSourceStats;
+  classificacoes: CoverageSourceStats;
+  reunioes: CoverageSourceStats;
 }
 
 export interface ComputedMetrics {
@@ -83,6 +116,8 @@ export interface ComputedMetrics {
   win_rate: number;
   contatos_decisor: number;
   contatos_decisor_info: number;
+  total_licencas_ativas: number;
+  coverage: CoverageReport;
 }
 
 export interface Client {
@@ -136,6 +171,7 @@ export interface N8nData {
   contatos_decisor: number;
   contatos_decisor_info: number;
   deals_pipeline: number;
+  total_licencas_ativas: number;
   ultimo_cliente: Client;
   parceiros: Partners;
   deals_ativos: Deal[];
@@ -231,6 +267,35 @@ export interface EsforcoData {
 
 export type ClassificacaoLead = ClassificacaoDeal;
 
+// Série diária de ligações — um ponto por dia
+export interface DailyCallPoint {
+  data: string;        // YYYY-MM-DD
+  total: number;       // total de ligações no dia
+  atendidas: number;   // ligações atendidas
+  taxa: number;        // taxa de conectividade (%)
+}
+
+// Resumo mensal para navegação por mês
+export interface MesSummary {
+  mes: string;          // YYYY-MM
+  label: string;        // "Nov 2025", "Dez 2025", etc.
+  total: number;        // total de ligações no mês
+  atendidas: number;    // ligações atendidas
+  media_diaria: number; // média diária (total / dias com dados)
+}
+
+// Resposta do endpoint /api/ligacoes-serie
+export interface LigacoesSerieResponse {
+  serie: DailyCallPoint[];
+  meses: MesSummary[];
+  total: number;
+  total_atendidas: number;
+  taxa_media: number;
+  periodo: string;
+  _cached?: boolean;
+  _cacheAge?: number;
+}
+
 export interface AgendaItem {
   task_id: string;
   lead_id: string;
@@ -250,6 +315,212 @@ export interface AgendaData {
   total: number;
   overdue: number;
   upcoming_7d: number;
+}
+
+// Weekly activity buckets — used by bucketizeByWeek() in metrics.ts
+export interface WeeklyBucket {
+  key: string;         // YYYY-MM-SN (ex: 2026-04-S2)
+  month: string;       // YYYY-MM
+  week: 1 | 2 | 3 | 4 | 5;
+  label: string;       // ex: "Abr S2"
+  ligacoes: number;
+  emails: number;
+  reunioes: number;
+  apresentacoes: number;
+  propostas: number;
+  fechamentos: number;
+}
+
+// POC (Proof of Concept) types — schema V1 (2026-05-07)
+// Aba `pocs` na planilha. deal_id faz FK para RawDeal.id (Zoho Deal ID).
+export type PocStatus = 'ativa' | 'convertida' | 'perdida';
+
+export interface RawPoc {
+  poc_id?: string;          // ID único da POC (ex: POC-001)
+  deal_id?: string;         // ID do deal Zoho CRM (correlação com RawDeal.id)
+  deal_nome?: string;       // Nome do deal (denormalizado)
+  empresa?: string;         // Nome da empresa
+  data_inicio?: string;     // YYYY-MM-DD
+  data_fim_prevista?: string; // YYYY-MM-DD
+  data_fim_real?: string;   // YYYY-MM-DD — vazio enquanto ativa
+  status?: string;          // 'ativa' | 'convertida' | 'perdida'
+  descricao?: string;       // Escopo / objetivo da POC
+  responsavel?: string;     // Vendedor / dono interno
+  resultado?: string;       // Notas: motivo de perda, valor convertido, etc.
+  created_time?: string;    // YYYY-MM-DD
+  modified_time?: string;   // YYYY-MM-DD
+}
+
+export interface Poc {
+  poc_id: string;
+  deal_id: string;
+  deal_nome: string;
+  empresa: string;
+  data_inicio: string;
+  data_fim_prevista: string | null;
+  data_fim_real: string | null;
+  status: PocStatus;
+  descricao: string;
+  responsavel: string;
+  resultado: string;
+  created_time: string;
+  modified_time: string;
+  /** Número de dias desde data_inicio (calculado em runtime) */
+  dias_em_poc: number;
+}
+
+export interface PocMetrics {
+  total: number;
+  ativas: number;
+  convertidas: number;
+  perdidas: number;
+  taxa_conversao: number;      // convertidas / (convertidas + perdidas) * 100
+  duracao_media_dias: number;  // média de (data_fim_real - data_inicio) para concluídas
+}
+
+// Renovações vencidas — closed_won SS deals with data_renovacao < today
+export interface RenovacaoVencida {
+  id: string;
+  nome: string;
+  empresa: string;
+  valor: number;
+  closing_date: string;   // data em que o deal foi fechado
+  data_renovacao: string; // data de renovação contratual
+  dias_vencido: number;   // dias desde data_renovacao até hoje
+}
+
+export interface RenovacoesVencidasMetrics {
+  total: number;        // quantidade de renovações vencidas
+  valor_total: number;  // soma dos valores dos deals vencidos
+  lista: RenovacaoVencida[];
+}
+
+// Clientes Ativos — base instalada + delta mensal por canal
+export interface ClientesAtivosSplit {
+  direto: number;
+  parceiro: number;
+  securisoft: number;
+  total: number;
+}
+
+export interface ClientesAtivosMes {
+  label: string;            // ex: "Mai 2026"
+  month: string;            // YYYY-MM
+  total: number;
+  split: ClientesAtivosSplit;
+}
+
+export interface ClientesAtivosMetrics {
+  total: number;            // todos os fechados ganhos (base instalada completa)
+  split: ClientesAtivosSplit;
+  mes_atual: ClientesAtivosMes;
+  mes_anterior: ClientesAtivosMes;
+  delta: number;            // mes_atual.total - mes_anterior.total
+  delta_split: ClientesAtivosSplit; // delta por canal
+}
+
+// Pipeline Bucket Classifier types
+export type PipelineBucketType = 'PIPELINE' | 'POC' | 'FOLLOW-UP' | 'OPORTUNIDADE';
+
+export interface PipelineBucketDeal {
+  id: string;
+  nome: string;
+  empresa: string;
+  stage: string;
+  valor: number;
+  categoria: string;
+  comissao_valor: number;
+  modified_time: string;
+  days_in_stage: number;
+}
+
+export interface PipelineBucket {
+  bucket: PipelineBucketType;
+  count: number;
+  valor_total: number;
+  comissao_total: number;
+  deals: PipelineBucketDeal[];
+}
+
+export interface PipelineBucketsMetrics {
+  buckets: PipelineBucket[];
+  total_deals: number;
+  total_valor: number;
+  total_comissao: number;
+}
+
+// MRR/ARR — Monthly/Annual Recurring Revenue from recurring closed_won deals
+export interface MrrArrMetrics {
+  mrr: number;               // Monthly Recurring Revenue (ARR / 12)
+  arr: number;               // Annual Recurring Revenue (sum of recurring deal values)
+  recurring_deals: number;   // count of deals explicitly marked recurring
+  non_recurring_deals: number;
+  // 'explicit' = deals have recurring flag; 'fallback' = no flag set, all closed_won used
+  source: 'explicit' | 'fallback';
+}
+
+// Faturamento Mensal — monthly revenue breakdown from closed_won deals
+export interface FaturamentoMes {
+  mes: string;           // YYYY-MM
+  label: string;         // "Jan 2026"
+  valor_fechado: number; // soma dos valores dos deals closed_won no mês
+  comissao_fechado: number; // soma das comissões calculadas
+  deals_count: number;   // número de deals fechados no mês
+  ticket_medio: number;  // valor_fechado / deals_count (0 se count = 0)
+}
+
+export interface FaturamentoMensalMetrics {
+  meses: FaturamentoMes[];       // sorted chronologically
+  total_valor: number;           // soma de todos os meses
+  total_comissao: number;
+  total_deals: number;
+  ticket_medio_geral: number;    // total_valor / total_deals
+}
+
+// Comissão por Owner + Canal por Mês
+export interface ComissaoPorOwnerCanal {
+  owner: string;        // vendedor responsável
+  canal: string;        // 'direto' | 'parceiro' | 'securisoft'
+  taxa: number;         // taxa de comissão (ex: 0.58)
+  deals_count: number;
+  valor_fechado: number;
+  comissao: number;     // valor_fechado * taxa
+}
+
+export interface ComissaoMes {
+  mes: string;                         // YYYY-MM
+  label: string;                       // "Jan 2026"
+  total_valor: number;
+  total_comissao: number;
+  por_owner_canal: ComissaoPorOwnerCanal[];
+}
+
+export interface ComissaoOwnerCanalMetrics {
+  meses: ComissaoMes[];                // sorted chronologically
+  total_comissao: number;
+  owners: {
+    owner: string;
+    total_valor: number;
+    total_comissao: number;
+    deals_count: number;
+  }[];
+}
+
+// Receita por canal — breakdown de valor_fechado por Direto/SS/Parceiro no período
+export interface ReceitaCanalItem {
+  categoria: 'direto' | 'parceiro' | 'securisoft';
+  label: string;          // "Direto" | "SecuriSoft" | "Parceiro"
+  valor_fechado: number;
+  comissao_fechado: number;
+  deals: number;
+  percentual: number;     // % de valor_fechado total (0-100)
+}
+
+export interface ReceitaPorCanalMetrics {
+  canais: ReceitaCanalItem[];
+  total_valor: number;
+  total_comissao: number;
+  total_deals: number;
 }
 
 // Excel Export types (V3.9)
@@ -298,4 +569,103 @@ export interface ExcelExportData {
   deals_ativos: any[];
   clientes_fechados: any[];
   kpis: ScorecardKPI[];
+}
+
+// ─── Resumo Diário (feature-016) ────────────────────────────────────────────
+// Snapshot diário persistido na aba `resumo_diario` (doc público). 1 linha/dia.
+// REGRA null vs 0: `0` = valor real capturado e é zero. `null` = NÃO capturado /
+// NÃO-histórico (POCs/base em backfill, manuais sem linha de chat) → UI mostra "—".
+export type Captured<T> = T | null;
+
+export type EmailsSource = 'chat' | 'raw-fresh' | 'raw-stale';
+export type ManualSource = 'chat' | 'none';
+export type BaseSource = 'live' | 'none';
+
+export interface ResumoCoverage {
+  ligacoes_fresh: boolean;
+  emails_source: EmailsSource;
+  manual_source: ManualSource;
+  base_source: BaseSource;
+  partial_tracao: boolean;
+}
+
+export interface VendedorCalls { realizadas: number; atendidas: number; }
+
+export interface ResumoBaseInstalada {
+  total_licencas: number;
+  clientes_ativos: number;
+  top_contas: { name: string; licencas: number }[];
+  demais_count: number;
+  demais_licencas: number;
+}
+
+export interface ResumoDiario {
+  data: string;            // YYYY-MM-DD (BRT)
+  atualizado_em: string;   // ISO
+  mode: 'live' | 'backfill';
+  coverage: ResumoCoverage;
+  ligacoes: { total: number; atendidas: number; taxa: number; por_vendedor: Record<string, VendedorCalls> };
+  emails: { total: Captured<number>; por_sender: Captured<Record<string, number>> };
+  apresentacoes: { total: Captured<number>; aproximado: boolean; por_vendedor: Captured<Record<string, number>> };
+  propostas: { total: Captured<number>; aproximado: boolean; por_vendedor: Captured<Record<string, number>> };
+  reuniao_tecnica: { total: Captured<number>; por_vendedor: Captured<Record<string, number>> };
+  whatsapp: { msgs: Captured<number>; convs: Captured<number> };
+  linkedin: { page: Captured<number>; perfis: Captured<number> };
+  pocs: Captured<{ ativas: number; lista: string[] }>;
+  base_instalada: Captured<ResumoBaseInstalada>;
+  destaques: { comercial: Captured<string>; marketing: Captured<string>; execucao: Captured<string>; atencao: Captured<string> };
+  total_tracao: Captured<number>;
+}
+
+// Linha bruta da aba `resumo_diario` (gviz). Colunas JSON chegam como string.
+export interface RawResumoDiario {
+  data?: string;
+  atualizado_em?: string;
+  mode?: string;
+  coverage?: string;                    // JSON
+  ligacoes_total?: number | string;
+  ligacoes_atendidas?: number | string;
+  ligacoes_taxa?: number | string;
+  ligacoes_por_vendedor?: string;       // JSON
+  emails_total?: number | string;
+  emails_por_sender?: string;           // JSON
+  apresentacoes_total?: number | string;
+  apresentacoes_por_vendedor?: string;  // JSON
+  propostas_total?: number | string;
+  propostas_por_vendedor?: string;      // JSON
+  reuniao_tecnica_total?: number | string;
+  reuniao_por_vendedor?: string;        // JSON
+  whatsapp_msgs?: number | string;
+  whatsapp_convs?: number | string;
+  linkedin_page?: number | string;
+  linkedin_perfis?: number | string;
+  pocs_ativas?: number | string;
+  pocs_lista?: string;                  // JSON
+  base_total_licencas?: number | string;
+  base_clientes_ativos?: number | string;
+  base_top_contas?: string;             // JSON
+  base_demais_count?: number | string;
+  base_demais_licencas?: number | string;
+  total_tracao?: number | string;
+  destaque_comercial?: string;
+  destaque_marketing?: string;
+  destaque_execucao?: string;
+  destaque_atencao?: string;
+}
+
+export interface ResumoSeriePoint {
+  data: string;
+  total_tracao: number | null;
+  ligacoes: number;
+  emails: number | null;
+}
+
+export interface ResumoDiarioResponse {
+  resumo: ResumoDiario | null;     // null = sem snapshot para a data
+  datas_disponiveis: string[];     // YYYY-MM-DD com snapshot (para navegação)
+  serie: ResumoSeriePoint[];       // últimos 30 dias para o gráfico Tração Diária
+  floor: string;                   // data mínima navegável (YYYY-MM-DD)
+  base_atual: ResumoBaseInstalada | null; // base instalada mais recente (estado atual) — usada quando o dia não tem snapshot de base
+  _cached?: boolean;
+  _cacheAge?: number;
 }

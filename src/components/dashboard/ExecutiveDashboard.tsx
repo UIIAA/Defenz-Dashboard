@@ -2,17 +2,40 @@
 
 import {
   Phone, Calendar, Presentation, FileText, Trophy,
-  AlertTriangle, RefreshCcw, Loader2, Download
+  AlertTriangle, RefreshCcw, Loader2, Download, DollarSign
 } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { DataHealthPanel, getHealth } from '@/components/dashboard/DataHealthPanel';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useDateRange } from '@/providers/DateRangeProvider';
 import { formatCurrency } from '@/lib/formatters';
-import type { DataSource } from '@/lib/types';
+import type { DataSource, CoverageSourceStats, ReceitaPorCanalMetrics } from '@/lib/types';
+
+const CoverageTooltip = ({
+  base, aba, coluna, stats,
+}: {
+  base: string;
+  aba: string;
+  coluna: string;
+  stats?: CoverageSourceStats;
+}) => (
+  <div className="space-y-1">
+    <p>{base}</p>
+    <p className="text-slate-400 border-t border-slate-600 pt-1 mt-1">
+      Fonte: planilha <span className="font-mono text-white/80">{aba}</span> · col <span className="font-mono text-white/80">{coluna}</span>
+    </p>
+    {stats && (
+      <p className="text-slate-400">
+        Cobertura: {stats.min_date ?? '?'} → {stats.max_date ?? '?'} · {stats.in_range} no período
+        {stats.dropped_invalid_date > 0 && ` · ${stats.dropped_invalid_date} inválidos`}
+      </p>
+    )}
+  </div>
+);
 
 const DataSourceBadge = ({ source }: { source: DataSource }) => (
   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -27,6 +50,79 @@ const DataSourceBadge = ({ source }: { source: DataSource }) => (
   </span>
 );
 
+const CANAL_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
+  direto:      { bg: 'bg-blue-50',   text: 'text-blue-700',   bar: 'bg-blue-500' },
+  parceiro:    { bg: 'bg-violet-50', text: 'text-violet-700', bar: 'bg-violet-500' },
+  securisoft:  { bg: 'bg-red-50',    text: 'text-red-700',    bar: 'bg-red-500' },
+};
+
+const ReceitaPorCanalSection = ({
+  receita,
+  loading,
+}: {
+  receita: ReceitaPorCanalMetrics;
+  loading: boolean;
+}) => (
+  <div className="space-y-3">
+    <div className="flex items-center gap-2">
+      <DollarSign size={16} className="text-slate-400" />
+      <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Financeiro — Receita por Canal</h2>
+    </div>
+
+    {/* Barra de proporção horizontal */}
+    <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
+      {receita.canais.map(c => (
+        c.percentual > 0 && (
+          <div
+            key={c.categoria}
+            className={`${CANAL_COLORS[c.categoria]?.bar ?? 'bg-slate-400'} transition-all duration-700`}
+            style={{ width: `${c.percentual}%` }}
+            title={`${c.label}: ${c.percentual}%`}
+          />
+        )
+      ))}
+    </div>
+
+    {/* Cards por canal */}
+    <div className="grid grid-cols-3 gap-4">
+      {receita.canais.map(canal => {
+        const colors = CANAL_COLORS[canal.categoria] ?? { bg: 'bg-slate-50', text: 'text-slate-700', bar: 'bg-slate-400' };
+        return (
+          <div
+            key={canal.categoria}
+            className={`${colors.bg} rounded-xl p-4 border border-white/60 shadow-sm`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-bold uppercase tracking-wider ${colors.text}`}>
+                {canal.label}
+              </span>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 ${colors.text}`}>
+                {canal.percentual}%
+              </span>
+            </div>
+            <p className={`text-xl font-bold ${colors.text} tabular-nums`}>
+              {formatCurrency(canal.valor_fechado)}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Comissao: {formatCurrency(canal.comissao_fechado)}
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {canal.deals} {canal.deals === 1 ? 'deal' : 'deals'} fechados
+            </p>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* Totais */}
+    <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+      <span>Total: <span className="font-semibold text-slate-700">{formatCurrency(receita.total_valor)}</span></span>
+      <span>Comissao total: <span className="font-semibold text-slate-700">{formatCurrency(receita.total_comissao)}</span></span>
+      <span>{receita.total_deals} deals fechados no periodo</span>
+    </div>
+  </div>
+);
+
 export const ExecutiveDashboard = () => {
   const [exporting, setExporting] = useState(false);
   const { dateRange } = useDateRange();
@@ -36,6 +132,8 @@ export const ExecutiveDashboard = () => {
     error,
     warnings,
     dataSource,
+    coverage,
+    receitaPorCanal,
     funnelData,
     filteredDealsAtivos,
     filteredClientesFechados,
@@ -184,7 +282,12 @@ export const ExecutiveDashboard = () => {
             title="Ligacoes"
             value={data ? String(data.ligacoes) : "-"}
             subtext={data ? `${data.taxa_conectividade}% atendidas (${data.ligacoes_atendidas} de ${data.ligacoes})` : ""}
-            tooltip="Total de ligacoes realizadas no periodo. Taxa = atendidas / total."
+            healthStatus={coverage ? getHealth(coverage.calls) : undefined}
+            tooltip={<CoverageTooltip
+              base="Total de ligacoes realizadas no periodo. Taxa = atendidas / total."
+              aba="ligacoes" coluna="data"
+              stats={coverage?.calls}
+            />}
           />
           <StatCard
             loading={loading}
@@ -192,7 +295,12 @@ export const ExecutiveDashboard = () => {
             title="Reunioes"
             value={data ? String(data.reunioes) : "-"}
             subtext={data && data.ligacoes > 0 ? `Conv: ${Math.round((data.reunioes / data.ligacoes) * 100)}% das ligacoes` : ""}
-            tooltip="Reunioes com <> no assunto do Outlook. Conversao = reunioes / ligacoes."
+            healthStatus={coverage ? getHealth(coverage.reunioes) : undefined}
+            tooltip={<CoverageTooltip
+              base="Reunioes com <> no assunto do Outlook. Conversao = reunioes / ligacoes."
+              aba="reunioes" coluna="data"
+              stats={coverage?.reunioes}
+            />}
           />
           <StatCard
             loading={loading}
@@ -200,7 +308,12 @@ export const ExecutiveDashboard = () => {
             title="Apresentacoes"
             value={data ? String(data.apresentacoes) : "-"}
             subtext={data && data.reunioes > 0 ? `Conv: ${Math.round((data.apresentacoes / data.reunioes) * 100)}% das reunioes` : ""}
-            tooltip="Deals com [APRESENTACAO] no campo Resultados. Conversao = apresentacoes / reunioes."
+            healthStatus={coverage ? getHealth(coverage.deals) : undefined}
+            tooltip={<CoverageTooltip
+              base="Deals com [APRESENTACAO] no campo Resultados. Conversao = apresentacoes / reunioes."
+              aba="deals" coluna="resultados"
+              stats={coverage?.deals}
+            />}
           />
           <StatCard
             loading={loading}
@@ -209,7 +322,12 @@ export const ExecutiveDashboard = () => {
             value={data ? String(data.propostas) : "-"}
             subtext={data ? `Pipeline: ${formatCurrency(data.valor_pipeline)}` : ""}
             highlight={true}
-            tooltip="Deals com Stage 'Proposta Enviada' ou [PROPOSTA]. Pipeline = soma dos valores."
+            healthStatus={coverage ? getHealth(coverage.deals) : undefined}
+            tooltip={<CoverageTooltip
+              base="Deals com Stage 'Proposta Enviada' ou [PROPOSTA]. Pipeline = soma dos valores."
+              aba="deals" coluna="stage / resultados"
+              stats={coverage?.deals}
+            />}
           />
           <StatCard
             loading={loading}
@@ -218,11 +336,22 @@ export const ExecutiveDashboard = () => {
             value={data ? String(data.deals_fechados) : "-"}
             subtext={data ? `Comissao: ${formatCurrency(data.comissao_fechado)}` : ""}
             highlight={true}
-            tooltip="Deals fechados como ganhos no periodo. Comissao calculada por categoria."
+            healthStatus={coverage ? getHealth(coverage.deals) : undefined}
+            tooltip={<CoverageTooltip
+              base="Deals fechados como ganhos no periodo. Comissao calculada por categoria."
+              aba="deals" coluna="closing_date"
+              stats={coverage?.deals}
+            />}
           />
         </div>
 
-        {/* TODO: Seções adicionais (financeiro, deals, esforço) serão adicionadas em fases futuras */}
+        {/* Cobertura de dados (colapsável) */}
+        <DataHealthPanel coverage={coverage} />
+
+        {/* Financeiro: receita por canal */}
+        {receitaPorCanal && receitaPorCanal.total_valor > 0 && (
+          <ReceitaPorCanalSection receita={receitaPorCanal} loading={loading} />
+        )}
       </motion.div>
     </AnimatePresence>
   );
