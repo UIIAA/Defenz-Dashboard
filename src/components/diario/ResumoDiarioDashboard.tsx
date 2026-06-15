@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Legend,
+  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -112,15 +112,18 @@ const CANAIS_CHART = [
 ] as const;
 
 function TracaoChart({ serie, onPick }: { serie: ResumoSeriePoint[]; onPick: (d: string) => void }) {
-  const data = serie.map(p => ({
-    data: p.data,
-    ligacoes: p.ligacoes ?? 0,
-    emails: p.emails ?? 0,
-    whatsapp: p.whatsapp ?? 0,
-    linkedin: p.linkedin ?? 0,
-    apresentacoes: p.apresentacoes ?? 0,
-    propostas: p.propostas ?? 0,
-  }));
+  const data = serie.map(p => {
+    const ligacoes = p.ligacoes ?? 0;
+    const emails = p.emails ?? 0;
+    const whatsapp = p.whatsapp ?? 0;
+    const linkedin = p.linkedin ?? 0;
+    const apresentacoes = p.apresentacoes ?? 0;
+    const propostas = p.propostas ?? 0;
+    return {
+      data: p.data, ligacoes, emails, whatsapp, linkedin, apresentacoes, propostas,
+      total: ligacoes + emails + whatsapp + linkedin + apresentacoes + propostas,
+    };
+  });
   const tickFmt = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
 
   return (
@@ -130,7 +133,7 @@ function TracaoChart({ serie, onPick }: { serie: ResumoSeriePoint[]; onPick: (d:
         <p className="text-slate-400 text-sm py-10 text-center">Sem série histórica para o período.</p>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart
+          <ComposedChart
             data={data}
             margin={{ top: 4, right: 8, bottom: 4, left: -16 }}
             barCategoryGap="18%"
@@ -148,10 +151,11 @@ function TracaoChart({ serie, onPick }: { serie: ResumoSeriePoint[]; onPick: (d:
             {CANAIS_CHART.map(c => (
               <Bar key={c.key} dataKey={c.key} name={c.label} fill={c.color} radius={[2, 2, 0, 0]} maxBarSize={12} cursor="pointer" />
             ))}
-          </BarChart>
+            <Line type="monotone" dataKey="total" name="Total" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={{ r: 2, fill: '#64748b' }} activeDot={{ r: 4 }} />
+          </ComposedChart>
         </ResponsiveContainer>
       )}
-      <p className="text-[11px] text-slate-400 mt-2">Uma barra por canal, por dia. Clique numa coluna pra abrir o dia. (Reunião técnica omitida — sem fonte de dados.)</p>
+      <p className="text-[11px] text-slate-400 mt-2">Uma barra por canal, por dia · linha cinza tracejada = Total. Clique numa coluna pra abrir o dia. (Reunião técnica omitida — sem fonte de dados.)</p>
     </div>
   );
 }
