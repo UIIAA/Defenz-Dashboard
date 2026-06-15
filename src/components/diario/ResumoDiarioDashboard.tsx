@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -101,35 +101,57 @@ function PorCanalTable({ r }: { r: ResumoDiario }) {
   );
 }
 
-// ─── Tração Diária chart ──────────────────────────────────────────────────────
-function TracaoChart({ serie, selected, onPick }: { serie: ResumoSeriePoint[]; selected: string; onPick: (d: string) => void }) {
-  const data = serie.map(p => ({ ...p, value: p.total_tracao ?? 0 }));
+// ─── Tração Diária chart (barras agrupadas por canal) ────────────────────────
+const CANAIS_CHART = [
+  { key: 'ligacoes', label: 'Ligações', color: '#dc2626' },
+  { key: 'emails', label: 'E-mail', color: '#f59e0b' },
+  { key: 'whatsapp', label: 'WhatsApp', color: '#22c55e' },
+  { key: 'linkedin', label: 'LinkedIn', color: '#0ea5e9' },
+  { key: 'apresentacoes', label: 'Apresentações', color: '#8b5cf6' },
+  { key: 'propostas', label: 'Propostas', color: '#ec4899' },
+] as const;
+
+function TracaoChart({ serie, onPick }: { serie: ResumoSeriePoint[]; onPick: (d: string) => void }) {
+  const data = serie.map(p => ({
+    data: p.data,
+    ligacoes: p.ligacoes ?? 0,
+    emails: p.emails ?? 0,
+    whatsapp: p.whatsapp ?? 0,
+    linkedin: p.linkedin ?? 0,
+    apresentacoes: p.apresentacoes ?? 0,
+    propostas: p.propostas ?? 0,
+  }));
   const tickFmt = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
 
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
-      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Tração Diária (30 dias)</h2>
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Tração Diária por Canal (30 dias)</h2>
       {data.length === 0 ? (
         <p className="text-slate-400 text-sm py-10 text-center">Sem série histórica para o período.</p>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart
+            data={data}
+            margin={{ top: 4, right: 8, bottom: 4, left: -16 }}
+            barCategoryGap="18%"
+            barGap={1}
+            onClick={(e: any) => { if (e?.activeLabel) onPick(String(e.activeLabel)); }}
+          >
             <XAxis dataKey="data" tickFormatter={tickFmt} tick={{ fill: '#94a3b8', fontSize: 11 }} interval="preserveStartEnd" axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
             <ReTooltip
-              cursor={{ fill: 'rgba(220,38,38,0.06)' }}
+              cursor={{ fill: 'rgba(220,38,38,0.05)' }}
               contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#0f172a', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               labelFormatter={(s) => format(new Date(`${s}T12:00:00`), "dd 'de' MMM", { locale: ptBR })}
-              formatter={(v: number | undefined, _n, p: any) => [`${nf(v ?? 0)} (lig ${nf(p.payload.ligacoes)}${p.payload.emails != null ? ` · em ${nf(p.payload.emails)}` : ''})`, 'Tração']}
             />
-            <Bar dataKey="value" radius={[3, 3, 0, 0]} onClick={(d: any) => d?.data && onPick(d.data)} cursor="pointer">
-              {data.map((d) => (
-                <Cell key={d.data} fill={d.data === selected ? '#dc2626' : '#e2e8f0'} />
-              ))}
-            </Bar>
+            <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+            {CANAIS_CHART.map(c => (
+              <Bar key={c.key} dataKey={c.key} name={c.label} fill={c.color} radius={[2, 2, 0, 0]} maxBarSize={12} cursor="pointer" />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       )}
+      <p className="text-[11px] text-slate-400 mt-2">Uma barra por canal, por dia. Clique numa coluna pra abrir o dia. (Reunião técnica omitida — sem fonte de dados.)</p>
     </div>
   );
 }
@@ -285,11 +307,11 @@ export const ResumoDiarioDashboard = () => {
               subtext={baseShow ? `${nf(baseShow.total_licencas)} licenças${baseIsCurrent ? ' (atual)' : ''}` : undefined} />
           </div>
 
-          {/* Table + chart */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <PorCanalTable r={r} />
-            <TracaoChart serie={response?.serie ?? []} selected={data} onPick={setData} />
-          </div>
+          {/* Tabela Por Canal/Responsável (largura total) */}
+          <PorCanalTable r={r} />
+
+          {/* Tração diária por canal — barras agrupadas (largura total) */}
+          <TracaoChart serie={response?.serie ?? []} onPick={setData} />
 
           {/* Destaques */}
           <Destaques r={r} />

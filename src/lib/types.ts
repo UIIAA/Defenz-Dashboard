@@ -658,6 +658,11 @@ export interface ResumoSeriePoint {
   total_tracao: number | null;
   ligacoes: number;
   emails: number | null;
+  whatsapp: number | null;
+  linkedin: number | null;
+  apresentacoes: number | null;
+  propostas: number | null;
+  reuniao: number | null;
 }
 
 export interface ResumoDiarioResponse {

@@ -20,11 +20,11 @@ export const AppNavbar = () => {
             Defenz<span className="text-red-600">.Dashboard</span>
           </h1>
           <nav className="hidden md:flex items-center gap-1 ml-4">
-            <NavLink href="/">Executivo</NavLink>
+            <NavLink href="/" disabled>Executivo</NavLink>
             <NavLink href="/diario">Resumo Diário</NavLink>
-            <NavLink href="/operacional">Operacional</NavLink>
-            <NavLink href="/atividade">Atividade</NavLink>
-            <NavLink href="/metas">Metas</NavLink>
+            <NavLink href="/operacional" disabled>Operacional</NavLink>
+            <NavLink href="/atividade" disabled>Atividade</NavLink>
+            <NavLink href="/metas" disabled>Metas</NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-slate-500 text-sm font-medium">
@@ -33,11 +33,11 @@ export const AppNavbar = () => {
         </div>
         {/* Mobile nav */}
         <nav className="flex md:hidden items-center gap-1 mt-3 flex-wrap">
-          <NavLink href="/">Executivo</NavLink>
+          <NavLink href="/" disabled>Executivo</NavLink>
           <NavLink href="/diario">Resumo Diário</NavLink>
-          <NavLink href="/operacional">Operacional</NavLink>
-          <NavLink href="/atividade">Atividade</NavLink>
-          <NavLink href="/metas">Metas</NavLink>
+          <NavLink href="/operacional" disabled>Operacional</NavLink>
+          <NavLink href="/atividade" disabled>Atividade</NavLink>
+          <NavLink href="/metas" disabled>Metas</NavLink>
         </nav>
       </div>
       <div className="mt-6 md:mt-0 flex items-center gap-2">

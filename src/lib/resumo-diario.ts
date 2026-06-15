@@ -187,6 +187,14 @@ export function buildSerie(
       total_tracao: r.total_tracao,
       ligacoes: r.ligacoes.total,
       emails: r.emails.total,
+      whatsapp: r.whatsapp.msgs,
+      linkedin:
+        r.linkedin.page === null && r.linkedin.perfis === null
+          ? null
+          : (r.linkedin.page ?? 0) + (r.linkedin.perfis ?? 0),
+      apresentacoes: r.apresentacoes.total,
+      propostas: r.propostas.total,
+      reuniao: r.reuniao_tecnica.total,
     }));
 }
 
