@@ -6,6 +6,7 @@ import type {
   ResumoDiario,
   ResumoCoverage,
   ResumoSeriePoint,
+  ResumoBaseInstalada,
   VendedorCalls,
 } from './types';
 
@@ -203,4 +204,116 @@ export function navigatorFloor(dates: string[], today: string): string {
   const hardFloor = addDays(today, -BACKFILL_MAX_DAYS);
   const earliest = dates.length ? dates[0] : null;
   return earliest && earliest > hardFloor ? earliest : hardFloor;
+}
+
+// --- Aggregation for range mode (totais somados do período) ---
+
+// null = nenhum dia capturou esse campo no período (→ UI mostra "—"); senão soma dos dias que têm.
+function sumCaptured(vals: (number | null)[]): number | null {
+  let any = false;
+  let s = 0;
+  for (const v of vals) {
+    if (v !== null && v !== undefined) { any = true; s += Number(v) || 0; }
+  }
+  return any ? s : null;
+}
+
+function mergeNumMaps(maps: (Record<string, number> | null)[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of maps) {
+    if (!m) continue;
+    for (const k of Object.keys(m)) out[k] = (out[k] || 0) + (Number(m[k]) || 0);
+  }
+  return out;
+}
+
+function mergeVendCalls(maps: Record<string, VendedorCalls>[]): Record<string, VendedorCalls> {
+  const out: Record<string, VendedorCalls> = {};
+  for (const m of maps) {
+    if (!m) continue;
+    for (const k of Object.keys(m)) {
+      if (!out[k]) out[k] = { realizadas: 0, atendidas: 0 };
+      out[k].realizadas += m[k]?.realizadas || 0;
+      out[k].atendidas += m[k]?.atendidas || 0;
+    }
+  }
+  return out;
+}
+
+// Soma os snapshots no intervalo [from, to] num único ResumoDiario (totais do período).
+// POCs e Destaques são por-dia → não fazem sentido somados, ficam null. Base = estado atual.
+export function aggregateRange(
+  raws: RawResumoDiario[],
+  from: string,
+  to: string,
+  baseAtual: ResumoBaseInstalada | null
+): ResumoDiario | null {
+  const rows = dedupeByData(raws)
+    .map(parseResumoRow)
+    .filter(r => DATE_RE.test(r.data) && r.data >= from && r.data <= to)
+    .sort((a, b) => a.data.localeCompare(b.data));
+  if (!rows.length) return null;
+
+  const ligTotal = rows.reduce((s, r) => s + r.ligacoes.total, 0);
+  const ligAtend = rows.reduce((s, r) => s + r.ligacoes.atendidas, 0);
+
+  return {
+    data: from,
+    atualizado_em: rows[rows.length - 1].atualizado_em,
+    mode: 'live',
+    coverage: {
+      ligacoes_fresh: true,
+      emails_source: 'chat',
+      manual_source: 'chat',
+      base_source: baseAtual ? 'live' : 'none',
+      partial_tracao: false,
+    },
+    ligacoes: {
+      total: ligTotal,
+      atendidas: ligAtend,
+      taxa: ligTotal > 0 ? Math.round((ligAtend / ligTotal) * 100) : 0,
+      por_vendedor: mergeVendCalls(rows.map(r => r.ligacoes.por_vendedor)),
+    },
+    emails: {
+      total: sumCaptured(rows.map(r => r.emails.total)),
+      por_sender: mergeNumMaps(rows.map(r => r.emails.por_sender)),
+    },
+    apresentacoes: {
+      total: sumCaptured(rows.map(r => r.apresentacoes.total)),
+      aproximado: false,
+      por_vendedor: mergeNumMaps(rows.map(r => r.apresentacoes.por_vendedor)),
+    },
+    propostas: {
+      total: sumCaptured(rows.map(r => r.propostas.total)),
+      aproximado: false,
+      por_vendedor: mergeNumMaps(rows.map(r => r.propostas.por_vendedor)),
+    },
+    reuniao_tecnica: {
+      total: sumCaptured(rows.map(r => r.reuniao_tecnica.total)),
+      por_vendedor: mergeNumMaps(rows.map(r => r.reuniao_tecnica.por_vendedor)),
+    },
+    whatsapp: {
+      msgs: sumCaptured(rows.map(r => r.whatsapp.msgs)),
+      convs: sumCaptured(rows.map(r => r.whatsapp.convs)),
+    },
+    linkedin: {
+      page: sumCaptured(rows.map(r => r.linkedin.page)),
+      perfis: sumCaptured(rows.map(r => r.linkedin.perfis)),
+    },
+    pocs: null, // estado atual, não somável no período
+    base_instalada: baseAtual,
+    destaques: { comercial: null, marketing: null, execucao: null, atencao: null }, // por-dia
+    total_tracao: rows.reduce((s, r) => s + (r.total_tracao || 0), 0),
+  };
+}
+
+export function daysInRange(dates: string[], from: string, to: string): number {
+  return dates.filter(d => d >= from && d <= to).length;
+}
+
+export function spanDays(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (isNaN(a) || isNaN(b)) return 1;
+  return Math.max(1, Math.round((b - a) / 86400000) + 1);
 }

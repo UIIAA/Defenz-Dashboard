@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Phone, Presentation, FileText, FlaskConical,
   Mail, MessageCircle, Linkedin, Users, RefreshCcw, Loader2, AlertTriangle,
@@ -12,7 +12,7 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DiarioCard } from './DiarioCard';
-import { DayNavigator } from './DayNavigator';
+import { DayNavigator, type DiarioView } from './DayNavigator';
 import { useResumoDiario } from '@/hooks/useResumoDiario';
 import { todayBRT } from '@/lib/resumo-diario';
 import type { ResumoDiario, ResumoSeriePoint, ResumoBaseInstalada } from '@/lib/types';
@@ -204,15 +204,29 @@ function CoverageBadges({ r }: { r: ResumoDiario }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export const ResumoDiarioDashboard = () => {
   const today = useMemo(() => todayBRT(), []);
-  const { data, setData, response, loading, error, refetch } = useResumoDiario(today);
+  const [view, setView] = useState<DiarioView>({ kind: 'dia', data: today });
+  const query = view.kind === 'dia' ? `data=${view.data}` : `from=${view.from}&to=${view.to}`;
+  const { setQuery, response, loading, error, refetch } = useResumoDiario(`data=${today}`);
 
-  const headerDate = useMemo(() => {
+  useEffect(() => { setQuery(query); }, [query, setQuery]);
+
+  const onDay = (d: string) => setView({ kind: 'dia', data: d });
+  const onRange = (from: string, to: string) => setView({ kind: 'periodo', from, to });
+
+  const isPeriodo = !!response?.periodo;
+  const headerLabel = useMemo(() => {
     try {
-      return format(new Date(`${data}T12:00:00`), "dd 'DE' MMMM yyyy", { locale: ptBR }).toUpperCase();
+      if (view.kind === 'periodo') {
+        const f = format(new Date(`${view.from}T12:00:00`), 'dd/MM', { locale: ptBR });
+        const t = format(new Date(`${view.to}T12:00:00`), 'dd/MM/yyyy', { locale: ptBR });
+        const dias = response?.periodo?.dias ?? 0;
+        return `PERÍODO ${f} – ${t} · ${dias} ${dias === 1 ? 'DIA COM DADO' : 'DIAS COM DADO'}`;
+      }
+      return format(new Date(`${view.data}T12:00:00`), "dd 'DE' MMMM yyyy", { locale: ptBR }).toUpperCase();
     } catch {
-      return data;
+      return '';
     }
-  }, [data]);
+  }, [view, response]);
 
   const r = response?.resumo ?? null;
   const floor = response?.floor ?? today;
@@ -226,10 +240,10 @@ export const ResumoDiarioDashboard = () => {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 font-display">Resumo Diário</h1>
-          <p className="text-red-600 text-sm font-bold tracking-wide mt-1">{headerDate} · INDICADORES DIÁRIOS DEFENZ</p>
+          <p className="text-red-600 text-sm font-bold tracking-wide mt-1">{headerLabel} · INDICADORES DIÁRIOS DEFENZ</p>
         </div>
         <div className="flex items-center gap-3">
-          <DayNavigator data={data} floor={floor} today={today} onChange={setData} loading={loading} />
+          <DayNavigator view={view} floor={floor} today={today} onDay={onDay} onRange={onRange} loading={loading} />
           <button
             onClick={refetch}
             disabled={loading}
@@ -244,9 +258,11 @@ export const ResumoDiarioDashboard = () => {
       {/* status line */}
       <div className="flex items-center justify-between text-xs text-slate-400 -mt-2">
         <div className="flex items-center gap-3">
-          {r && <span>Atualizado: {r.atualizado_em ? format(new Date(r.atualizado_em), 'dd/MM HH:mm') : '—'}</span>}
+          {isPeriodo
+            ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">totais somados do período</span>
+            : r && <span>Atualizado: {r.atualizado_em ? format(new Date(r.atualizado_em), 'dd/MM HH:mm') : '—'}</span>}
           {response?._cached && <span className="text-amber-500">cache</span>}
-          {r && <CoverageBadges r={r} />}
+          {r && !isPeriodo && <CoverageBadges r={r} />}
         </div>
       </div>
 
@@ -263,12 +279,16 @@ export const ResumoDiarioDashboard = () => {
         </div>
       ) : !r ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <p className="text-lg text-slate-600">Sem snapshot para {data.slice(8, 10)}/{data.slice(5, 7)}</p>
+          <p className="text-lg text-slate-600">
+            {view.kind === 'periodo'
+              ? 'Sem dados no período selecionado'
+              : `Sem snapshot para ${view.data.slice(8, 10)}/${view.data.slice(5, 7)}`}
+          </p>
           <p className="text-sm text-slate-400 mt-2">Rode o snapshot diário ou escolha outra data.</p>
           {response && response.datas_disponiveis.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2 justify-center max-w-xl">
               {response.datas_disponiveis.slice(-10).reverse().map(d => (
-                <button key={d} onClick={() => setData(d)} className="px-2.5 py-1 text-xs rounded-md bg-white border border-slate-200 text-slate-600 hover:text-red-600 hover:border-red-200">
+                <button key={d} onClick={() => onDay(d)} className="px-2.5 py-1 text-xs rounded-md bg-white border border-slate-200 text-slate-600 hover:text-red-600 hover:border-red-200">
                   {d.slice(8, 10)}/{d.slice(5, 7)}
                 </button>
               ))}
@@ -315,10 +335,16 @@ export const ResumoDiarioDashboard = () => {
           <PorCanalTable r={r} />
 
           {/* Tração diária por canal — barras agrupadas (largura total) */}
-          <TracaoChart serie={response?.serie ?? []} onPick={setData} />
+          <TracaoChart serie={response?.serie ?? []} onPick={onDay} />
 
-          {/* Destaques */}
-          <Destaques r={r} />
+          {/* Destaques — só no modo diário (são registros por dia) */}
+          {!isPeriodo ? (
+            <Destaques r={r} />
+          ) : (
+            <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5 text-sm text-slate-500">
+              Destaques operacionais e ata aparecem no <strong className="text-slate-700">modo diário</strong> (são registros por dia). Aqui você vê os <strong className="text-slate-700">totais somados</strong> do período.
+            </div>
+          )}
 
           {/* Base instalada top contas */}
           {baseShow && baseShow.top_contas.length > 0 && (

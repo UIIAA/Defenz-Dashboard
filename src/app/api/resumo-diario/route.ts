@@ -10,6 +10,9 @@ import {
   availableDates,
   buildSerie,
   navigatorFloor,
+  aggregateRange,
+  daysInRange,
+  spanDays,
   BACKFILL_MAX_DAYS,
 } from "@/lib/resumo-diario";
 import type { RawResumoDiario, ResumoDiarioResponse } from "@/lib/types";
@@ -32,11 +35,20 @@ export async function GET(request: NextRequest) {
 
   const today = todayBRT();
   const { searchParams } = new URL(request.url);
+  const fromRaw = searchParams.get("from");
+  const toRaw = searchParams.get("to");
+  const isRange = !!fromRaw && !!toRaw && DATE_RE.test(fromRaw) && DATE_RE.test(toRaw);
+
   const rawData = searchParams.get("data") || today;
   // Default + clamp into [today-120, today] (BRT). Reject malformed input → today.
   const data = clampData(DATE_RE.test(rawData) ? rawData : today, today);
 
-  const cacheKey = `resumo_${data}`;
+  // Range mode: clamp both ends into [today-120, today], ensure from <= to.
+  let from = isRange ? clampData(fromRaw as string, today) : data;
+  let to = isRange ? clampData(toRaw as string, today) : data;
+  if (isRange && from > to) { const t = from; from = to; to = t; }
+
+  const cacheKey = isRange ? `range_${from}_${to}` : `resumo_${data}`;
   const cached = memoryCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return NextResponse.json({
@@ -64,6 +76,7 @@ export async function GET(request: NextRequest) {
         serie: [],
         floor: hardFloor,
         base_atual: null,
+        periodo: null,
       };
       return NextResponse.json(empty);
     }
@@ -80,13 +93,27 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => String(b.data ?? "").localeCompare(String(a.data ?? "")));
     const base_atual = baseRows.length ? parseResumoRow(baseRows[0]).base_instalada : null;
 
-    const response: ResumoDiarioResponse = {
-      resumo: match ? parseResumoRow(match) : null,
-      datas_disponiveis: dates,
-      serie: buildSerie(rowsRaw, data, 30),
-      floor: navigatorFloor(dates, today),
-      base_atual,
-    };
+    let response: ResumoDiarioResponse;
+    if (isRange) {
+      const agg = aggregateRange(rowsRaw, from, to, base_atual);
+      response = {
+        resumo: agg,
+        datas_disponiveis: dates,
+        serie: buildSerie(rowsRaw, to, Math.max(7, Math.min(120, spanDays(from, to)))),
+        floor: navigatorFloor(dates, today),
+        base_atual,
+        periodo: agg ? { from, to, dias: daysInRange(dates, from, to) } : null,
+      };
+    } else {
+      response = {
+        resumo: match ? parseResumoRow(match) : null,
+        datas_disponiveis: dates,
+        serie: buildSerie(rowsRaw, data, 30),
+        floor: navigatorFloor(dates, today),
+        base_atual,
+        periodo: null,
+      };
+    }
 
     memoryCache.set(cacheKey, { data: response, timestamp: Date.now() });
     return NextResponse.json(response);

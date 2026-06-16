@@ -665,12 +665,20 @@ export interface ResumoSeriePoint {
   reuniao: number | null;
 }
 
+// Quando o usuário seleciona um intervalo no calendário (totais somados do período).
+export interface PeriodoInfo {
+  from: string;   // YYYY-MM-DD
+  to: string;     // YYYY-MM-DD
+  dias: number;   // dias com snapshot dentro do intervalo
+}
+
 export interface ResumoDiarioResponse {
-  resumo: ResumoDiario | null;     // null = sem snapshot para a data
+  resumo: ResumoDiario | null;     // null = sem snapshot para a data/período. Em modo período = totais somados.
   datas_disponiveis: string[];     // YYYY-MM-DD com snapshot (para navegação)
-  serie: ResumoSeriePoint[];       // últimos 30 dias para o gráfico Tração Diária
+  serie: ResumoSeriePoint[];       // série para o gráfico Tração Diária
   floor: string;                   // data mínima navegável (YYYY-MM-DD)
-  base_atual: ResumoBaseInstalada | null; // base instalada mais recente (estado atual) — usada quando o dia não tem snapshot de base
+  base_atual: ResumoBaseInstalada | null; // base instalada mais recente (estado atual)
+  periodo: PeriodoInfo | null;     // preenchido quando a resposta é um intervalo agregado
   _cached?: boolean;
   _cacheAge?: number;
 }
