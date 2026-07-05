@@ -195,3 +195,14 @@ Cobertura obrigatória do módulo antes de tocar o node. Sem testes novos no Ver
 - **Q3 — Destaques 100% Sonnet:** ✅ **sim** — classificação nos 4 buckets migra pro produtor; keyword-matching sobrevive SÓ no fallback.
 - **Q4 — Formato granular canônico:** ✅ **manter o agregado-parêntese** da skill como formato documentado (evita 3ª era).
 - **Q5 — 04/07:** decidir na implementação, checando o histograma (`defenz-metricas-read`).
+
+## Adendo (05/07) — Regra de Destaques: "Venda é prioridade"
+
+Refino aprovado pelo Marcos para a seção **Destaques Operacionais** do `/diario`. A caixa **Comercial** foi renomeada para **Vendas** (label; o campo/coluna `comercial` não muda) e é a prioridade (vem primeiro). A caixa Vendas mostra só as **atividades de venda** do chat (os números seguem nos cards existentes, sem duplicar).
+
+**Regra de classificação (precedência dura):** `pós-venda → venda → atenção → marketing → execução(default)`.
+- **É Vendas (comercial):** prospecção / lead novo / mapeamento de CNPJ · apresentação, demo, POC, reunião técnica de oportunidade · proposta · negociação · follow-up comercial · fechamento (ganho/perdido) · renovação, upsell, expansão.
+- **NÃO é Vendas (mantém a caixa limpa):** pós-venda operacional (setup, ativação de licença, hash/console, onboarding, suporte, ticket de cliente já fechado) → **Execução**; marketing (posts, criativos, LinkedIn, carrossel) → **Marketing**; gestão/contrato/financeiro/admin → **Execução**; bug, risco, problema, pendência, "sem sucesso" → **Ponto de atenção**.
+- **Desempate:** venda vence; item operacional "menor" fica fora de Vendas. **Default = Execução** (não Comercial), para não poluir Vendas.
+
+**Implementação:** (1) classificador `classifyAtividade(text, categoria)` em `Defenz_Chief/src/lib/metricas-canon.ts` (5 testes novos + fixtures das 3 eras atualizadas), portado verbatim no Code node "Parse Metricas". De quebra, checar venda antes de marketing resolve a colisão `proposta`→`post`. (2) Produtor Sonnet (skill `relatorio-diario` + rotina remota) recebe a regra para classificar os destaques no `_resumo_json`. (3) Render: `ResumoDiarioDashboard.tsx` label Comercial→Vendas. Nota: o classificador do fallback é conservador (só termo claro de venda entra em Vendas); a classificação "de verdade" é do Sonnet no JSON.

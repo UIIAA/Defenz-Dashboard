@@ -163,7 +163,7 @@ function TracaoChart({ serie, onPick }: { serie: ResumoSeriePoint[]; onPick: (d:
 // ─── Destaques ────────────────────────────────────────────────────────────────
 function Destaques({ r }: { r: ResumoDiario }) {
   const items = [
-    { label: 'Comercial', value: r.destaques.comercial, color: 'text-red-600' },
+    { label: 'Vendas', value: r.destaques.comercial, color: 'text-red-600' },
     { label: 'Marketing', value: r.destaques.marketing, color: 'text-sky-600' },
     { label: 'Execução', value: r.destaques.execucao, color: 'text-violet-600' },
     { label: 'Ponto de atenção', value: r.destaques.atencao, color: 'text-amber-600' },
