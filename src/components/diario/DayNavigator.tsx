@@ -1,22 +1,17 @@
 "use client";
 
-import { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
-import { format, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import type { DateRange } from 'react-day-picker';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { addDays } from '@/lib/resumo-diario';
+import type { RangeSelection } from '@/lib/date-range';
 
 const toDate = (s: string) => new Date(`${s}T12:00:00`);
-const toStr = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmtShort = (s: string) => { try { return format(toDate(s), 'dd/MM', { locale: ptBR }); } catch { return s; } };
 
-export type DiarioView =
-  | { kind: 'dia'; data: string }
-  | { kind: 'periodo'; from: string; to: string };
+// Modelo de seleção do Resumo Diário = a seleção compartilhada (dia | periodo).
+export type DiarioView = RangeSelection;
 
 interface DayNavigatorProps {
   view: DiarioView;
@@ -28,10 +23,6 @@ interface DayNavigatorProps {
 }
 
 export const DayNavigator = ({ view, floor, today, onDay, onRange, loading }: DayNavigatorProps) => {
-  const [open, setOpen] = useState(false);
-  const [range, setRange] = useState<DateRange | undefined>(undefined);
-  const phase = useRef<'idle' | 'from'>('idle');
-
   const isDia = view.kind === 'dia';
   const refDay = isDia ? view.data : view.to;
   const atFloor = refDay <= floor;
@@ -53,33 +44,14 @@ export const DayNavigator = ({ view, floor, today, onDay, onRange, loading }: Da
     ? (() => { try { return format(toDate(view.data), "dd 'de' MMMM yyyy", { locale: ptBR }); } catch { return view.data; } })()
     : `${fmtShort(view.from)} – ${fmtShort(view.to)}`;
 
-  const handleDayClick = (clickedDate: Date) => {
-    const clicked = startOfDay(clickedDate);
-    if (phase.current === 'idle') {
-      setRange({ from: clicked, to: clicked });
-      phase.current = 'from';
-    } else {
-      const f = range?.from ? startOfDay(range.from) : null;
-      if (f && clicked.getTime() === f.getTime()) setRange({ from: clicked, to: clicked });
-      else if (f) setRange(clicked < f ? { from: clicked, to: f } : { from: f, to: clicked });
-      phase.current = 'idle';
-    }
+  const onPick = (sel: RangeSelection) => {
+    if (sel.kind === 'dia') onDay(sel.data);
+    else onRange(sel.from, sel.to);
   };
 
-  const applyCalendar = () => {
-    if (!range?.from) return;
-    const f = toStr(range.from);
-    const t = toStr(range.to ?? range.from);
-    setOpen(false);
-    phase.current = 'idle';
-    setRange(undefined);
-    if (f === t) onDay(clampDay(f));
-    else onRange(clampDay(f), clampDay(t));
-  };
-
-  const presetBtn = (active: boolean, label: string, onClick: () => void) => (
+  const presetBtn = (active: boolean, plabel: string, onClick: () => void) => (
     <button
-      key={label}
+      key={plabel}
       onClick={onClick}
       disabled={loading}
       className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors border ${
@@ -88,7 +60,7 @@ export const DayNavigator = ({ view, floor, today, onDay, onRange, loading }: Da
           : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 border-transparent'
       }`}
     >
-      {label}
+      {plabel}
     </button>
   );
 
@@ -104,30 +76,19 @@ export const DayNavigator = ({ view, floor, today, onDay, onRange, loading }: Da
           <ChevronLeft size={16} />
         </button>
 
-        <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) { phase.current = 'idle'; setRange(undefined); } }}>
-          <PopoverTrigger asChild>
+        <DateRangePicker
+          value={view}
+          floor={floor}
+          today={today}
+          onChange={onPick}
+          disabled={loading}
+          trigger={
             <button className="px-3 py-1 flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-red-600 transition-colors">
               <CalendarDays size={14} className="text-red-500" />
               <span className="capitalize whitespace-nowrap">{label}</span>
             </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="center" sideOffset={8}>
-            <div className="px-3 pt-2 text-[11px] text-slate-400">Clique 1 dia (= diário) ou 2 dias (= intervalo)</div>
-            <Calendar
-              mode="range"
-              selected={range}
-              onSelect={() => {}}
-              onDayClick={handleDayClick}
-              defaultMonth={toDate(refDay)}
-              disabled={{ before: toDate(floor), after: toDate(today) }}
-              locale={ptBR}
-            />
-            <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
-              <button onClick={() => { setOpen(false); setRange(undefined); phase.current = 'idle'; }} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700">Cancelar</button>
-              <button onClick={applyCalendar} disabled={!range?.from} className="px-4 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">Aplicar</button>
-            </div>
-          </PopoverContent>
-        </Popover>
+          }
+        />
 
         <button
           aria-label="Próximo dia"

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { CalendarDays } from 'lucide-react';
-import { format, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import type { DateRange } from 'react-day-picker';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { addDays, spanDays } from '@/lib/resumo-diario';
+import { daySel, decodeCustom, encodeCustom, type RangeSelection } from '@/lib/date-range';
 
 interface DateFilterProps {
     currentRange: string;
@@ -24,71 +24,23 @@ const RANGES = [
     { id: 'alltime', label: 'All time' },
 ];
 
+// Piso generoso (não há dado antes de 2025) e teto = hoje (sem datas futuras).
+const FLOOR = '2024-01-01';
+const MAX_SPAN_DAYS = 366;
+
 export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilterProps) => {
-    const [open, setOpen] = useState(false);
-    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-    const selectionPhaseRef = useRef<'idle' | 'from_selected'>('idle');
+    const [today] = useState(() => format(new Date(), 'yyyy-MM-dd'));
 
     const isCustom = currentRange.startsWith('custom:');
+    const value: RangeSelection = isCustom ? decodeCustom(currentRange) : daySel(today);
 
-    const handleDayClick = (day: Date) => {
-        const today = startOfDay(new Date());
-        const clicked = startOfDay(day);
-
-        if (selectionPhaseRef.current === 'idle') {
-            // First click → from = clicked, to = today
-            setDateRange({
-                from: clicked,
-                to: clicked <= today ? today : clicked,
-            });
-            selectionPhaseRef.current = 'from_selected';
-        } else {
-            // Second click
-            const from = dateRange?.from ? startOfDay(dateRange.from) : null;
-
-            if (from && clicked.getTime() === from.getTime()) {
-                // Same date → single day
-                setDateRange({ from: clicked, to: clicked });
-            } else if (from) {
-                // Different date → set range (sort from/to)
-                if (clicked < from) {
-                    setDateRange({ from: clicked, to: from });
-                } else {
-                    setDateRange({ from, to: clicked });
-                }
-            }
-            selectionPhaseRef.current = 'idle';
+    const handlePick = (sel: RangeSelection) => {
+        // Preserva o guard de 366 dias do DateFilter antigo (clampa `from`, nunca gera range inválido).
+        let out = sel;
+        if (sel.kind === 'periodo' && spanDays(sel.from, sel.to) > MAX_SPAN_DAYS) {
+            out = { kind: 'periodo', from: addDays(sel.to, -(MAX_SPAN_DAYS - 1)), to: sel.to };
         }
-    };
-
-    const handlePopoverChange = (isOpen: boolean) => {
-        setOpen(isOpen);
-        if (isOpen) {
-            selectionPhaseRef.current = 'idle';
-            setDateRange(undefined);
-        }
-    };
-
-    const handleApply = () => {
-        if (dateRange?.from) {
-            const from = dateRange.from;
-            const to = dateRange.to ?? from;
-            if (from > to) return;
-            const diffMs = to.getTime() - from.getTime();
-            const diffDays = diffMs / (1000 * 60 * 60 * 24);
-            if (diffDays > 366) return;
-            const fromStr = format(from, 'yyyy-MM-dd');
-            const toStr = format(to, 'yyyy-MM-dd');
-            onRangeChange(`custom:${fromStr}:${toStr}`);
-            setOpen(false);
-            selectionPhaseRef.current = 'idle';
-        }
-    };
-
-    const handlePresetClick = (rangeId: string) => {
-        setDateRange(undefined);
-        selectionPhaseRef.current = 'idle';
-        onRangeChange(rangeId);
+        onRangeChange(encodeCustom(out));
     };
 
     const customLabel = isCustom
@@ -102,10 +54,15 @@ export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilter
 
     return (
         <div className="flex items-center bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-full p-1 shadow-sm">
-            <Popover open={open} onOpenChange={handlePopoverChange}>
-                <PopoverTrigger asChild>
+            <DateRangePicker
+                value={value}
+                floor={FLOOR}
+                today={today}
+                onChange={handlePick}
+                align="start"
+                disabled={disabled}
+                trigger={
                     <button
-                        disabled={disabled}
                         className={`px-3 flex items-center border-r border-slate-200 mr-1 transition-colors ${
                             isCustom ? 'text-red-600' : 'text-red-500 hover:text-red-600'
                         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
@@ -117,33 +74,8 @@ export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilter
                             </span>
                         )}
                     </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" sideOffset={8}>
-                    <Calendar
-                        mode="range"
-                        selected={dateRange}
-                        onSelect={() => {}}
-                        onDayClick={handleDayClick}
-                        numberOfMonths={1}
-                        locale={ptBR}
-                    />
-                    <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
-                        <button
-                            onClick={() => { setOpen(false); setDateRange(undefined); }}
-                            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            onClick={handleApply}
-                            disabled={!dateRange?.from}
-                            className="px-4 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            Aplicar
-                        </button>
-                    </div>
-                </PopoverContent>
-            </Popover>
+                }
+            />
 
             <div className="flex space-x-1">
                 {RANGES.map((range) => {
@@ -151,7 +83,7 @@ export const DateFilter = ({ currentRange, onRangeChange, disabled }: DateFilter
                     return (
                         <button
                             key={range.id}
-                            onClick={() => handlePresetClick(range.id)}
+                            onClick={() => onRangeChange(range.id)}
                             disabled={disabled}
                             className={`
                 relative px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-300
