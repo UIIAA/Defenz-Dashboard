@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
-import { fetchTabStrict } from "@/lib/sheets";
+import { fetchTabStrict, fetchFromSheets } from "@/lib/sheets";
+import { computeFarol } from "@/lib/farol";
 import {
   todayBRT,
   clampData,
@@ -15,7 +16,7 @@ import {
   spanDays,
   BACKFILL_MAX_DAYS,
 } from "@/lib/resumo-diario";
-import type { RawResumoDiario, ResumoDiarioResponse } from "@/lib/types";
+import type { RawResumoDiario, ResumoDiarioResponse, RawDeal, Farol } from "@/lib/types";
 
 // NOTE: verifySession protects this APP ROUTE only — it is NOT a confidentiality
 // control for the data. The `resumo_diario` tab lives in the public gviz doc
@@ -68,6 +69,16 @@ export async function GET(request: NextRequest) {
 
     const hardFloor = addDays(today, -BACKFILL_MAX_DAYS);
 
+    // Farol de Metas — sempre "ao vivo" (semana/mês atuais), independente da data
+    // selecionada. Reusa a aba `deals` já populada pelo n8n; falha vira null (card some).
+    let farol: Farol | null = null;
+    try {
+      const deals = (await fetchFromSheets("deals")) as RawDeal[];
+      farol = computeFarol(deals, new Date());
+    } catch (e) {
+      console.error("Farol: falha ao carregar deals", e);
+    }
+
     if (rowsRaw === null) {
       // Tab not created yet → empty state, NOT a ligacoes-shaped payload.
       const empty: ResumoDiarioResponse = {
@@ -77,6 +88,7 @@ export async function GET(request: NextRequest) {
         floor: hardFloor,
         base_atual: null,
         periodo: null,
+        farol,
       };
       return NextResponse.json(empty);
     }
@@ -103,6 +115,7 @@ export async function GET(request: NextRequest) {
         floor: navigatorFloor(dates, today),
         base_atual,
         periodo: agg ? { from, to, dias: daysInRange(dates, from, to) } : null,
+        farol,
       };
     } else {
       response = {
@@ -112,6 +125,7 @@ export async function GET(request: NextRequest) {
         floor: navigatorFloor(dates, today),
         base_atual,
         periodo: null,
+        farol,
       };
     }
 

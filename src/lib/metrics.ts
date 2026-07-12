@@ -48,7 +48,7 @@ export function classifyOrigin(leadSource: string): { categoria: string; taxa: n
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function dateInRange(dateStr: string | undefined, start: string, end: string): boolean {
+export function dateInRange(dateStr: string | undefined, start: string, end: string): boolean {
   if (!dateStr) return false;
   const d = String(dateStr).slice(0, 10);
   if (!DATE_RE.test(d)) return false;

@@ -12,6 +12,7 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DiarioCard } from './DiarioCard';
+import { FarolCard } from './FarolCard';
 import { DayNavigator, type DiarioView } from './DayNavigator';
 import { useResumoDiario } from '@/hooks/useResumoDiario';
 import { todayBRT } from '@/lib/resumo-diario';
@@ -265,6 +266,9 @@ export const ResumoDiarioDashboard = () => {
           {r && !isPeriodo && <CoverageBadges r={r} />}
         </div>
       </div>
+
+      {/* Farol de Metas (semana/mês ao vivo) — independente de ter snapshot no dia */}
+      {response?.farol && <FarolCard farol={response.farol} />}
 
       {error ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">

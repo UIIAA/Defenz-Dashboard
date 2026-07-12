@@ -679,6 +679,26 @@ export interface ResumoDiarioResponse {
   floor: string;                   // data mínima navegável (YYYY-MM-DD)
   base_atual: ResumoBaseInstalada | null; // base instalada mais recente (estado atual)
   periodo: PeriodoInfo | null;     // preenchido quando a resposta é um intervalo agregado
+  farol: Farol | null;             // Farol de Metas (semana/mês ao vivo); null se deals indisponíveis
   _cached?: boolean;
   _cacheAge?: number;
+}
+
+// ─── Farol de Metas (feature-farol-metas, Fase 1) ────────────────────────────
+export type FarolCor = 'verde' | 'amarelo' | 'vermelho';
+export type FarolLabel = 'batido' | 'no ritmo' | 'atrás' | 'fora do ritmo';
+
+export interface FarolBucket {
+  revenue: number;   // receita ganha na janela (Σ valor dos deals ganhos)
+  goal: number;      // meta da janela (R$)
+  pctAbs: number;    // revenue / goal (0..∞)
+  expected: number;  // esperado pelo pace no instante (R$)
+  cor: FarolCor;
+  label: FarolLabel;
+}
+
+export interface Farol {
+  semana: FarolBucket;
+  mes: FarolBucket;
+  generatedAt: string; // ISO do instante de cálculo
 }
