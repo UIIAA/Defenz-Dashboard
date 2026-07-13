@@ -306,6 +306,14 @@ Para aparecer no funil via Microsoft Calendar, o assunto do evento no Outlook de
 | Apresentacoes | Zoho Deals | `Resultados` contem `[APRESENTACAO]` |
 | Propostas | Zoho Deals | Stage = "Proposta Enviada" OU `[PROPOSTA]` |
 
+### Valor do Deal (`valor`) e Farol de Metas
+
+**Regra canônica:** o campo `valor` de cada deal — e portanto a receita do **Farol de Metas** (`src/lib/farol.ts`) — vem **SEMPRE do campo `Amount` do Zoho (rótulo "Montante" na UI)**. Isso já é o comportamento do export: o nó `Format Deals Raw` (workflow `QjnzGicZHIPBNN1g`) faz `valor = Number(d.Amount) || 0` e o nó `Zoho Deals` busca `Amount`.
+
+- **Não usar** `Valor estimado` (custom) nem `Receita Esperada` (`Expected_Revenue = Amount × Probabilidade`) como fonte primária. O Montante é a verdade do valor fechado.
+- **Failure mode:** um deal `Fechado Ganho`/`Contrato Enviado` que aparece com `valor = 0` (Farol R$ 0) significa que o **`Amount` está vazio no Zoho** — corrigir o Montante no Zoho. O cron (6h/18h) relê o `Amount` e faz upsert por `id`, então a correção reflete no Sheets/Farol no próximo run (ou rodar o workflow manualmente pra refletir na hora).
+- Fallback opcional (decisão de negócio, **não** default): se quiser que um ganho com Montante 0 mostre um valor provisório, cair para `Expected_Revenue` e depois `Valor estimado` — muda a fonte-da-verdade, então só com aprovação.
+
 ### Caching Strategy
 
 - **Server**: In-memory cache 30min TTL on all API routes (except export)
