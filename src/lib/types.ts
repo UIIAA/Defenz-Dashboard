@@ -72,6 +72,7 @@ export interface RawDeal {
   data_renovacao?: string;  // YYYY-MM-DD — data de renovação do contrato (SS deals)
   recurring?: string;       // 'true'|'sim'|'1' quando o contrato é recorrente (MRR/ARR)
   owner?: string;           // responsável pelo deal no Zoho CRM (Deal Owner)
+  tags?: string;            // nomes das tags do deal no Zoho, unidas por ", " (feature-metas-fonte-receita)
 }
 
 export interface RawReuniao {
@@ -727,7 +728,14 @@ export interface WeekDelta {
 export interface WeekMetric {
   weekStart: string; // YYYY-MM-DD (segunda)
   weekEnd: string;   // YYYY-MM-DD (domingo)
+  // feature-metas-fonte-receita: `revenue` passou a significar SÓ a receita
+  // "Venda Defenz" (fonteVenda === 'defenz') — é o que alimenta a meta/pctAbs/
+  // cor/label/diagnóstico. `revenueRepasse` é a receita "Repasse SS" (informativa,
+  // fora da meta). `revenueTotal` = revenue + revenueRepasse (reconcilia com o
+  // Farol Fase 1 do /diario, que soma tudo). Ver docs/features/feature-metas-fonte-receita.md.
   revenue: number;
+  revenueRepasse: number;
+  revenueTotal: number;
   goal: number;      // GOAL_WEEK (R$ 6.000)
   pctAbs: number;     // revenue / goal
   cor: FarolCor;

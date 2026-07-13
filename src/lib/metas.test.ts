@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeMetas, weekRevenue, weeklyEsforco } from './metas';
+import { computeMetas, weekRevenue, weeklyEsforco, fonteVenda } from './metas';
 import type { RawDeal, RawResumoDiario } from './types';
 
 // America/Sao_Paulo é UTC-3 o ano todo (sem DST desde 2019). Mesmos instantes-âncora
@@ -27,29 +27,83 @@ const resumo = (data: string, fields: Partial<RawResumoDiario> = {}): RawResumoD
 });
 
 describe('weekRevenue — atribuição por closing_date (mesma regra do Farol)', () => {
+  // won() não seta lead_source → classifyOrigin('') cai no default 'direto' →
+  // fonteVenda === 'defenz'. Por isso toda a receita destes testes cai no balde
+  // `defenz` (repasse = 0); a partição em si é coberta no describe dedicado abaixo.
   it('soma deals ganhos com closing_date dentro da janela', () => {
     const deals = [won(6000, '2026-07-14')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toBe(6000);
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
   });
 
   it('deal fora da janela não conta', () => {
     const deals = [won(9000, '2026-07-06')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toBe(0);
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0 });
   });
 
   it('valor como string é somado', () => {
     const deals = [won('6000', '2026-07-14')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toBe(6000);
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
   });
 
   it('deal em pipeline (não ganho) não conta', () => {
     const deals = [won(6000, '2026-07-14', 'Proposta Enviada')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toBe(0);
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0 });
   });
 
   it('"Contrato Enviado" conta como ganho', () => {
     const deals = [won(6000, '2026-07-14', 'Contrato Enviado')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toBe(6000);
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
+  });
+});
+
+describe('fonteVenda — separa Venda Defenz de Repasse SS (feature-metas-fonte-receita §3)', () => {
+  it('categoria direto (ex.: Apollo) → defenz', () => {
+    expect(fonteVenda({ lead_source: 'Apollo.io' })).toBe('defenz');
+  });
+
+  it('categoria parceiro (genérico, sem "ss") → defenz', () => {
+    expect(fonteVenda({ lead_source: 'Parceiro XPTO' })).toBe('defenz');
+  });
+
+  it('securisoft sem tag → repasse (default conservador)', () => {
+    expect(fonteVenda({ lead_source: 'Parceiro SS' })).toBe('repasse');
+  });
+
+  it('securisoft com tag "Venda Defenz" → defenz', () => {
+    expect(fonteVenda({ lead_source: 'Parceiro SS', tags: 'Venda Defenz' })).toBe('defenz');
+  });
+
+  it('tag é case-insensitive e tolera espaços extras', () => {
+    expect(fonteVenda({ lead_source: 'securisoft', tags: '  venda    DEFENZ  ' })).toBe('defenz');
+  });
+
+  it('tag reconhecida mesmo combinada com outras tags (lista separada por vírgula)', () => {
+    expect(fonteVenda({ lead_source: 'Parceiro SS', tags: 'Cliente VIP, Venda Defenz' })).toBe('defenz');
+  });
+
+  it('sem lead_source e sem tags → default (classifyOrigin) é direto → defenz', () => {
+    expect(fonteVenda({})).toBe('defenz');
+  });
+});
+
+describe('weekRevenue — particiona por fonteVenda (Venda Defenz × Repasse SS)', () => {
+  it('deal securisoft sem tag conta só como repasse', () => {
+    const deals: RawDeal[] = [{ ...won(6000, '2026-07-14'), lead_source: 'Parceiro SS' }];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 6000 });
+  });
+
+  it('deal securisoft com tag "Venda Defenz" conta só como defenz', () => {
+    const deals: RawDeal[] = [{ ...won(6000, '2026-07-14'), lead_source: 'Parceiro SS', tags: 'Venda Defenz' }];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
+  });
+
+  it('mistura de fontes na mesma semana soma cada balde separadamente', () => {
+    const deals: RawDeal[] = [
+      { ...won(4000, '2026-07-14'), lead_source: 'Apollo' },                              // defenz
+      { ...won(2000, '2026-07-15'), lead_source: 'Parceiro SS' },                         // repasse (sem tag)
+      { ...won(1000, '2026-07-16'), lead_source: 'Parceiro SS', tags: 'venda defenz' },   // defenz (tag)
+    ];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 5000, repasse: 2000 });
   });
 });
 
@@ -128,6 +182,41 @@ describe('computeMetas — classificação bati/não-bati (pctAbs >= 1)', () => 
     expect(semanas[0].weekStart).toBe('2026-07-13');
     expect(semanas[0].cor).toBe('amarelo');
     expect(semanas[0].label).toBe('atrás');
+  });
+});
+
+describe('computeMetas — a meta conta só Venda Defenz (feature-metas-fonte-receita)', () => {
+  it('deal securisoft SEM tag não entra no pctAbs — vira revenueRepasse, revenue defenz fica 0', () => {
+    const now = new Date('2026-07-15T15:00:00Z'); // semana 13-19/07, mesma semana do closing_date
+    const deals: RawDeal[] = [{ ...won(6000, '2026-07-15'), lead_source: 'Parceiro SS' }];
+    const { semanas } = computeMetas(deals, [], now, 1);
+    expect(semanas[0].revenue).toBe(0);
+    expect(semanas[0].revenueRepasse).toBe(6000);
+    expect(semanas[0].revenueTotal).toBe(6000);
+    expect(semanas[0].pctAbs).toBe(0);
+    expect(semanas[0].cor).toBe('vermelho');
+  });
+
+  it('deal securisoft COM tag "Venda Defenz" entra no pctAbs normalmente', () => {
+    const now = new Date('2026-07-15T15:00:00Z');
+    const deals: RawDeal[] = [{ ...won(6000, '2026-07-15'), lead_source: 'Parceiro SS', tags: 'Venda Defenz' }];
+    const { semanas } = computeMetas(deals, [], now, 1);
+    expect(semanas[0].revenue).toBe(6000);
+    expect(semanas[0].revenueRepasse).toBe(0);
+    expect(semanas[0].revenueTotal).toBe(6000);
+    expect(semanas[0].pctAbs).toBe(1);
+  });
+
+  it('mistura defenz + repasse: revenue = só defenz, revenueTotal = soma de tudo', () => {
+    const now = new Date('2026-07-15T15:00:00Z');
+    const deals: RawDeal[] = [
+      { ...won(4000, '2026-07-15'), lead_source: 'Apollo' },                            // defenz
+      { ...won(2500, '2026-07-15'), lead_source: 'Parceiro SS' },                       // repasse
+    ];
+    const { semanas } = computeMetas(deals, [], now, 1);
+    expect(semanas[0].revenue).toBe(4000);
+    expect(semanas[0].revenueRepasse).toBe(2500);
+    expect(semanas[0].revenueTotal).toBe(6500);
   });
 });
 

@@ -76,6 +76,11 @@ function WeekHeaderCard({ w }: { w: WeekMetric }) {
         </span>
         <span className="text-sm text-slate-400 tabular-nums">/ {brl(w.goal)} meta</span>
       </div>
+      {w.revenueRepasse > 0 && (
+        <p className="mt-1 text-xs text-slate-400">
+          + <span className="font-medium text-slate-500 tabular-nums">{brl(w.revenueRepasse)}</span> repasse SS (fora da meta)
+        </p>
+      )}
 
       <div className="relative mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden">
         <motion.div
@@ -116,10 +121,36 @@ function PorqueBloco({ w, isRetro }: { w: WeekMetric; isRetro: boolean }) {
   );
 }
 
+// Tooltip customizado (não dá pra usar só `formatter`): precisamos mostrar o total
+// (Venda Defenz + Repasse SS) junto das duas séries empilhadas + Meta + Esforço.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ReceitaTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload as { receitaTotal: number } | undefined;
+  return (
+    <div className="rounded-lg bg-white border border-slate-200 shadow-lg shadow-slate-200/60 px-3 py-2 text-xs">
+      <p className="font-semibold text-slate-900 mb-1">{label}</p>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      {payload.map((p: any) => (
+        <p key={p.dataKey} style={{ color: p.color }} className="tabular-nums">
+          {p.name}: {p.dataKey === 'esforcoTotal' ? nf(Number(p.value) || 0) : brl(Number(p.value) || 0)}
+        </p>
+      ))}
+      {row && (
+        <p className="mt-1 pt-1 border-t border-slate-100 font-semibold text-slate-900 tabular-nums">
+          Total: {brl(row.receitaTotal)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ComparativoChart({ semanas }: { semanas: WeekMetric[] }) {
   const data = [...semanas].reverse().map(w => ({
     label: weekLabel(w),
-    receita: w.revenue,
+    receitaDefenz: w.revenue,
+    receitaRepasse: w.revenueRepasse,
+    receitaTotal: w.revenueTotal,
     meta: w.goal,
     esforcoTotal:
       w.esforco.ligacoes + w.esforco.emails + w.esforco.apresentacoes + w.esforco.propostas + w.esforco.reunioes,
@@ -135,16 +166,10 @@ function ComparativoChart({ semanas }: { semanas: WeekMetric[] }) {
           <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
           <YAxis yAxisId="rev" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
           <YAxis yAxisId="esf" orientation="right" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-          <ReTooltip
-            contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#0f172a', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={((value: any, name: any) => {
-              const v = Number(value) || 0;
-              return name === 'Esforço total' ? [nf(v), name] : [brl(v), name];
-            }) as never}
-          />
+          <ReTooltip content={ReceitaTooltip} />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-          <Bar yAxisId="rev" dataKey="receita" name="Receita" fill="#dc2626" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Venda Defenz" stackId="receita" fill="#dc2626" maxBarSize={40} />
+          <Bar yAxisId="rev" dataKey="receitaRepasse" name="Repasse SS" stackId="receita" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
           <Line yAxisId="rev" type="monotone" dataKey="meta" name="Meta (R$6k)" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
           <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço total" stroke="#0ea5e9" strokeWidth={1.5} dot={{ r: 2 }} />
         </ComposedChart>
@@ -225,6 +250,9 @@ export const MetasDashboard = () => {
         </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
+          <p className="text-xs text-slate-400">
+            Aqui a meta conta só a <span className="font-medium text-slate-500">Venda Defenz</span>; o Repasse SS é informativo. O Farol de Metas do /diario soma o total (Venda Defenz + Repasse SS) — por isso os dois podem divergir.
+          </p>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-4">
             <WeekHeaderCard w={atual} />
             <PorqueBloco w={retro} isRetro={semanas.length > 1} />

@@ -1,19 +1,50 @@
-// Farol de Metas — Fase 2 (Landed): "por que bati / não bati" por semana ISO.
+// Farol de Metas — Fase 2 (Landed) + fonte da receita (feature-metas-fonte-receita).
 // Função pura determinística — sem fetch, sem LLM. Reusa a bucketização de semana e
-// a lógica de receita ganha do Farol (Fase 1, `farol.ts`): zero duplicação de
-// isoDow/mondayOf/addDays/brtParts/weekElapsed/sumWon/grade. Esforço vem da aba
+// a lógica de ganho do Farol (Fase 1, `farol.ts`): zero duplicação de
+// isoDow/mondayOf/addDays/brtParts/weekElapsed/grade. Esforço vem da aba
 // `resumo_diario` (mesmo parser do `resumo-diario.ts`), agregado por semana.
-// Ver docs/features/feature-farol-metas.md — seção "Fase 2 — Landed".
+// Ver docs/features/feature-farol-metas.md — seção "Fase 2 — Landed" — e
+// docs/features/feature-metas-fonte-receita.md (separação Venda Defenz × Repasse SS).
 
 import type { RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta } from './types';
-import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, sumWon, grade } from './farol';
+import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade } from './farol';
+import { isClosedWon, dateInRange, classifyOrigin } from './metrics';
 import { dedupeByData, parseResumoRow } from './resumo-diario';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Receita ganha (mesma regra do Farol: isClosedWon + closing_date na janela).
-export function weekRevenue(deals: RawDeal[], weekStart: string, weekEnd: string): number {
-  return sumWon(deals, weekStart, weekEnd);
+// Fonte da receita do deal (feature-metas-fonte-receita §3) — determinística, computada
+// na Vercel (não vem pronta do n8n/Sheets):
+//   categoria ∈ {direto, parceiro}  → 'defenz'  (nossa pela origem, via classifyOrigin(lead_source))
+//   tags contém "Venda Defenz"      → 'defenz'  (lead SS que a Defenz trabalhou, marcado no Zoho)
+//   senão (securisoft sem tag)      → 'repasse' (default conservador: SecuriSoft vendeu e repassou)
+export function fonteVenda(deal: RawDeal): 'defenz' | 'repasse' {
+  const { categoria } = classifyOrigin(String(deal.lead_source || ''));
+  if (categoria === 'direto' || categoria === 'parceiro') return 'defenz';
+
+  const tags = String(deal.tags || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (tags.includes('venda defenz')) return 'defenz';
+
+  return 'repasse';
+}
+
+export interface WeekRevenueSplit {
+  defenz: number;
+  repasse: number;
+}
+
+// Receita ganha (mesma regra do Farol: isClosedWon + closing_date na janela),
+// particionada por fonteVenda. `defenz` alimenta a meta; `repasse` é informativo.
+export function weekRevenue(deals: RawDeal[], weekStart: string, weekEnd: string): WeekRevenueSplit {
+  let defenz = 0;
+  let repasse = 0;
+  for (const d of deals) {
+    if (!isClosedWon(String(d.stage || '')) || !dateInRange(d.closing_date, weekStart, weekEnd)) continue;
+    const valor = Number(d.valor) || 0;
+    if (fonteVenda(d) === 'defenz') defenz += valor;
+    else repasse += valor;
+  }
+  return { defenz, repasse };
 }
 
 // Soma os campos de esforço da aba resumo_diario para os dias dentro de [weekStart, weekEnd].
@@ -60,7 +91,9 @@ const ESFORCO_LABELS: Record<EsforcoField, string> = {
 interface WeekRaw {
   weekStart: string;
   weekEnd: string;
-  revenue: number;
+  revenue: number;         // Venda Defenz — alimenta meta/pctAbs/cor/label/diagnóstico
+  revenueRepasse: number;  // Repasse SS — informativo
+  revenueTotal: number;    // defenz + repasse
   esforco: WeekEsforco;
 }
 
@@ -126,10 +159,13 @@ export function computeMetas(
   const raw: WeekRaw[] = Array.from({ length: nWeeks }, (_, i) => {
     const weekStart = addDays(currentWeekStart, -7 * i);
     const weekEnd = addDays(weekStart, 6);
+    const rev = weekRevenue(deals, weekStart, weekEnd);
     return {
       weekStart,
       weekEnd,
-      revenue: weekRevenue(deals, weekStart, weekEnd),
+      revenue: rev.defenz,
+      revenueRepasse: rev.repasse,
+      revenueTotal: rev.defenz + rev.repasse,
       esforco: weeklyEsforco(resumoRows, weekStart, weekEnd),
     };
   });
@@ -149,6 +185,8 @@ export function computeMetas(
       weekStart: cur.weekStart,
       weekEnd: cur.weekEnd,
       revenue: cur.revenue,
+      revenueRepasse: cur.revenueRepasse,
+      revenueTotal: cur.revenueTotal,
       goal: GOAL_WEEK,
       pctAbs,
       cor,
