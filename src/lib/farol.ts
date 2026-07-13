@@ -20,11 +20,13 @@ function isWon(stage: string | undefined): boolean {
 }
 
 // --- BRT date/time helpers ---
+// Exportados (não privados) para reuso em src/lib/metas.ts (Fase 2 — Farol de
+// Metas) sem duplicar a lógica de semana ISO / pace. Ver docs/features/feature-farol-metas.md.
 
-interface BrtParts { date: string; dow: number; hour: number; minute: number; }
+export interface BrtParts { date: string; dow: number; hour: number; minute: number; }
 
 // Wall-clock BRT de um instante. `dow` = ISO weekday (Seg=1 … Dom=7).
-function brtParts(now: Date): BrtParts {
+export function brtParts(now: Date): BrtParts {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
@@ -36,13 +38,13 @@ function brtParts(now: Date): BrtParts {
 }
 
 // ISO weekday (Seg=1 … Dom=7) de um YYYY-MM-DD. Math UTC só-data (à prova de fuso).
-function isoDow(dateStr: string): number {
+export function isoDow(dateStr: string): number {
   const [y, m, d] = dateStr.split('-').map(Number);
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Dom..6=Sáb
   return wd === 0 ? 7 : wd;
 }
 
-function addDays(dateStr: string, n: number): string {
+export function addDays(dateStr: string, n: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + n);
@@ -50,7 +52,7 @@ function addDays(dateStr: string, n: number): string {
 }
 
 // Segunda-feira (YYYY-MM-DD) da semana que contém dateStr.
-function mondayOf(dateStr: string): string {
+export function mondayOf(dateStr: string): string {
   return addDays(dateStr, -(isoDow(dateStr) - 1));
 }
 
@@ -67,7 +69,7 @@ function mondaysInMonth(ym: string): string[] {
 }
 
 // Fração de pace da semana [0,1]: rampa Seg 08:00 → Sex 23:59; Sáb/Dom = 1 (overtime).
-function weekElapsed(p: BrtParts): number {
+export function weekElapsed(p: BrtParts): number {
   const RAMP_START = 8 * 60;                    // Seg 08:00 (min desde Seg 00:00)
   const RAMP_END = 4 * 1440 + 23 * 60 + 59;     // Sex 23:59
   if (p.dow >= 6) return 1;                      // Sáb/Dom = overtime
@@ -77,7 +79,7 @@ function weekElapsed(p: BrtParts): number {
   return (mow - RAMP_START) / (RAMP_END - RAMP_START);
 }
 
-function sumWon(deals: RawDeal[], start: string, end: string): number {
+export function sumWon(deals: RawDeal[], start: string, end: string): number {
   let s = 0;
   for (const d of deals) {
     if (isWon(d.stage) && dateInRange(d.closing_date, start, end)) {
@@ -87,7 +89,7 @@ function sumWon(deals: RawDeal[], start: string, end: string): number {
   return s;
 }
 
-function grade(revenue: number, goal: number, expected: number): { cor: FarolCor; label: FarolLabel } {
+export function grade(revenue: number, goal: number, expected: number): { cor: FarolCor; label: FarolLabel } {
   const pctAbs = goal > 0 ? revenue / goal : 0;
   if (pctAbs >= 1) return { cor: 'verde', label: 'batido' };
   if (revenue >= expected) return { cor: 'verde', label: 'no ritmo' };

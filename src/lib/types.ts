@@ -702,3 +702,44 @@ export interface Farol {
   mes: FarolBucket;
   generatedAt: string; // ISO do instante de cálculo
 }
+
+// ─── Farol de Metas (feature-farol-metas, Fase 2 — Landed) ───────────────────
+// "Por que bati / não bati" por semana ISO (Seg–Dom), reusando resumo_diario + deals.
+export interface WeekEsforco {
+  ligacoes: number;
+  emails: number;
+  apresentacoes: number;
+  propostas: number;
+  reunioes: number;
+}
+
+// Variação percentual vs a semana anterior (ex.: -0.6 = caiu 60%). null = sem
+// semana anterior para comparar, ou divisão por zero indefinida.
+export interface WeekDelta {
+  revenue: number | null;
+  ligacoes: number | null;
+  emails: number | null;
+  apresentacoes: number | null;
+  propostas: number | null;
+  reunioes: number | null;
+}
+
+export interface WeekMetric {
+  weekStart: string; // YYYY-MM-DD (segunda)
+  weekEnd: string;   // YYYY-MM-DD (domingo)
+  revenue: number;
+  goal: number;      // GOAL_WEEK (R$ 6.000)
+  pctAbs: number;     // revenue / goal
+  cor: FarolCor;
+  label: FarolLabel;
+  esforco: WeekEsforco;
+  delta: WeekDelta;
+  diagnostico: string; // heurístico determinístico "por que bati/não bati"
+}
+
+export interface MetasResponse {
+  semanas: WeekMetric[]; // mais recente primeiro
+  generatedAt: string;   // ISO do instante de cálculo
+  _cached?: boolean;
+  _cacheAge?: number;
+}

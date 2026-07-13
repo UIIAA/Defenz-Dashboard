@@ -9,8 +9,9 @@ import { useDateRange } from '@/providers/DateRangeProvider';
 export const AppNavbar = () => {
   const { dateRange, setDateRange } = useDateRange();
   const pathname = usePathname();
-  // /diario owns its own single-day navigator — the global range filter would collide.
-  const showRangeFilter = !pathname.startsWith('/diario');
+  // /diario tem seu próprio navegador; /metas usa semana ISO própria — nos dois o
+  // filtro de intervalo global não se aplica (seria um no-op confuso).
+  const showRangeFilter = !pathname.startsWith('/diario') && !pathname.startsWith('/metas');
 
   return (
     <header className="mb-8 flex flex-col md:flex-row md:items-end md:justify-between">
@@ -24,7 +25,7 @@ export const AppNavbar = () => {
             <NavLink href="/diario">Resumo Diário</NavLink>
             <NavLink href="/operacional" disabled>Operacional</NavLink>
             <NavLink href="/atividade" disabled>Atividade</NavLink>
-            <NavLink href="/metas" disabled>Metas</NavLink>
+            <NavLink href="/metas">Metas</NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-slate-500 text-sm font-medium">
@@ -37,7 +38,7 @@ export const AppNavbar = () => {
           <NavLink href="/diario">Resumo Diário</NavLink>
           <NavLink href="/operacional" disabled>Operacional</NavLink>
           <NavLink href="/atividade" disabled>Atividade</NavLink>
-          <NavLink href="/metas" disabled>Metas</NavLink>
+          <NavLink href="/metas">Metas</NavLink>
         </nav>
       </div>
       <div className="mt-6 md:mt-0 flex items-center gap-2">
