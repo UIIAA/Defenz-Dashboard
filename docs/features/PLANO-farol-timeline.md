@@ -5,9 +5,11 @@
 > as specs aterrissadas têm o detalhe. Escrito a partir de recon do código real em 12/07/2026.
 
 ## Ordem
-1. **Farol Fase 1** — `feature-farol-metas.md` §7-1. Entrega o "tô batendo os 6k?" (semana + mês). Menor esforço, maior valor.
-2. **Farol Fase 2** — tela de comparação semanal (não-MVP).
-3. **Timeline** — `feature-timeline-cliente.md`. Vem depois do Farol.
+1. ✅ **Farol Fase 1** — `feature-farol-metas.md` §7-1. "Tô batendo os 6k?" (semana + mês). **No ar.**
+1b. ✅ **Seletor de Intervalo** — `feature-intervalo-datas.md` Fase 1+2 (DateRangePicker reusável, Diário + Exec/Operacional). **No ar.**
+2. ⏳ **Farol Fase 2** — tela "por que bati / não bati" em `/metas`, reusando o `resumo_diario` agregado por semana. Ver "Fase 2 — Landed" em `feature-farol-metas.md`. **Em andamento.**
+3. ⬜ **Ligações de IA** — `feature-ligacoes-ia.md`. Aba dedicada pras chamadas do agente de vendas (fonte Zoho → export novo pro Sheets). Enfileirada.
+4. ⬜ **Timeline / raio-x por Deal** — `feature-timeline-cliente.md`. Consome o `DateRangePicker` (Overview por período). Depois do Farol.
 
 ## Por que é pequeno (reuso do que já existe)
 O Dashboard **não tem banco**; lê Google Sheets populado pelo n8n (Zoho→Sheets, cron 6h/18h). Então:

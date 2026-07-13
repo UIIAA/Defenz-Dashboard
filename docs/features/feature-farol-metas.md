@@ -81,3 +81,36 @@ type Farol = { semana: FarolBucket; mes: FarolBucket; generatedAt: string }
 - [ ] Decidir `isClosedWon` (inclui `contrato enviado`) vs Farol estrito.
 - [ ] Meta em mês de 5 semanas: manter `6000×semanas` (Ago=30k) ou teto fixo 24k?
 - [ ] Confirmar thresholds de cor (default 0.8).
+
+---
+
+## Fase 2 — Landed (aterrissada, aprovada 13/07/2026)
+**Tela "por que bati / não bati" da semana, em `/metas`, reusando o `resumo_diario` — SEM banco/aba nova.**
+
+### Decisões (do Marcos)
+- Vive na rota **`/metas`** (hoje stub) — ativar o link no navbar.
+- Fonte = **aba `resumo_diario`** (já persiste 1 linha/dia: `ligacoes_total`, `emails_total`, `apresentacoes_total`, `propostas_total`, `reuniao_tecnica_total`, `whatsapp_msgs`, `linkedin_*`) **agregada por semana ISO (Seg–Dom)** + `deals` (receita ganha por semana via `closing_date`, mesma lógica do Farol).
+- Tudo determinístico (JS calcula), tema Lux.
+
+### Peças
+- **`src/lib/metas.ts`** (puro, TDD):
+  - Reusar helpers de semana. **Extrair** `isoDow`/`mondayOf`/`addDays` hoje privados em `farol.ts` para um ponto compartilhado (evitar duplicar), e uma função `weekRevenue(deals, weekStart, weekEnd)` a partir do `sumWon` do Farol.
+  - `weeklyEsforco(resumoRows, weekStart, weekEnd)` → soma os campos de esforço dos dias da semana.
+  - `computeMetas(deals, resumoRows, now, nWeeks=8)` → `{ semanas: WeekMetric[] }`, mais recente primeiro. `WeekMetric = { weekStart, weekEnd, revenue, goal:6000, pctAbs, cor, label (reusar grade()/FarolBucket), esforco:{ligacoes,emails,apresentacoes,propostas,reunioes}, delta:{<campo>: revenue/esforço vs semana anterior} }`.
+  - **Diagnóstico "por que bati/não bati"** (heurístico, determinístico): pra a semana corrente, se `pctAbs<1`, apontar os 1–2 campos de esforço com **maior queda %** vs a semana anterior ("Propostas caíram 60%"); se bateu, apontar o que puxou. Sem LLM.
+- **`src/lib/metas.test.ts`** — bucketização por semana ISO, `weekRevenue`, classificação bati/não-bati, deltas, diagnóstico.
+- **`GET /api/metas`** — `verifySession`; lê `resumo_diario` (`fetchTabStrict`) + `deals` (`fetchFromSheets`); `computeMetas`; cache 30min. Tipos em `types.ts` (`WeekMetric`, `MetasResponse`).
+- **Página `/metas`** — substitui o stub: `MetasDashboard`:
+  - Header semana atual: meta vs realizado + cor/label (reusar visual do `FarolBucket`/`FarolCard`).
+  - Bloco **"Por que bati / não bati"**: receita vs meta + breakdown de esforço da semana com deltas ↑↓ vs semana anterior + a frase-diagnóstico.
+  - **Comparativo N semanas** (chart Recharts: receita × meta por semana + linha de esforço total).
+  - Ativar o link `/metas` no `AppNavbar` (hoje translúcido/não-clicável).
+
+### Reuso obrigatório (não reescrever)
+`farol.ts` (grade/cor/label, sumWon, helpers de semana), `resumo-diario.ts` (`addDays`, dedupe, parse), `DateRangePicker` se quiser navegação de semanas, padrão de card/tema.
+
+### Aceite
+- [ ] `metas.ts` com testes verdes (bucket semanal, receita, diagnóstico); `build` verde.
+- [ ] `/metas` mostra semana atual (meta/realizado/cor) + "por que bati/não bati" + comparativo N semanas.
+- [ ] Link `/metas` ativo no navbar; `/diario` e Farol Fase 1 sem regressão.
+- [ ] Reconcilia com o Farol Fase 1 (mesma receita/semana).
