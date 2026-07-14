@@ -8,7 +8,8 @@
 1. ✅ **Farol Fase 1** — `feature-farol-metas.md` §7-1. "Tô batendo os 6k?" (semana + mês). **No ar.**
 1b. ✅ **Seletor de Intervalo** — `feature-intervalo-datas.md` Fase 1+2 (DateRangePicker reusável, Diário + Exec/Operacional). **No ar.**
 2. ⏳ **Farol Fase 2** — tela "por que bati / não bati" em `/metas`, reusando o `resumo_diario` agregado por semana. Ver "Fase 2 — Landed" em `feature-farol-metas.md`. **Em andamento.**
-2b. ⬜ **Distinção fonte de receita no /metas** — `feature-metas-fonte-receita.md`. Separa Repasse SS × Venda Defenz (tag no Zoho → export → meta só sobre a venda trabalhada). Depende de você taggar os deals SS no Zoho.
+2b. ✅ **Distinção fonte de receita no /metas** — `feature-metas-fonte-receita.md`. Repasse SS × Venda Defenz (tag `Venda Defenz` no Zoho → export → meta só sobre a venda trabalhada). **No ar** (`e580552`); falta só o Marcos taggar os deals SS no Zoho.
+2c. ⬜ **Ajustes Farol/Robô/Semana (PEDIDOS 13/07)** — `feature-metas-robo-semana.md`. (1) mover o Farol do /diario 100% pro /metas (semana+mês); (2) coluna "Robô" na tabela do /diario (Callbox ramal 102 = robô); (3) filtro de intervalo de semanas no /metas (Seg–Sex); (4) esforço medido Seg-Sex. **Próximo a implementar** (conversa nova). Decisões travadas na spec.
 3. ⬜ **Ligações de IA** — `feature-ligacoes-ia.md`. Aba dedicada pras chamadas do agente de vendas (fonte Zoho → export novo pro Sheets). Enfileirada.
 4. ⬜ **Timeline / raio-x por Deal** — `feature-timeline-cliente.md`. Consome o `DateRangePicker` (Overview por período). Depois do Farol.
 
