@@ -11,12 +11,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Verify session
+  // Verify session (só a assinatura do cookie — sem tocar o banco)
   const session = await verifySession(request);
 
   if (!session) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Gate de papel: /admin é só pra admin (role lido do cookie, sem query).
+  if (pathname.startsWith("/admin") && session.role !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();

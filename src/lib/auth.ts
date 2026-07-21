@@ -4,10 +4,25 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "defenz_session";
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
-interface SessionPayload {
-  authenticated: boolean;
+export type Role = "admin" | "member";
+
+// feature-auth-individual: a sessão passou a carregar a IDENTIDADE (antes era só
+// `{ authenticated }`). Cookies antigos sem `sub` são rejeitados no verify → forçam
+// re-login uma vez. O middleware lê role/sub daqui SEM tocar o banco.
+export interface SessionPayload {
+  sub: string; // users.id
+  email: string;
+  name: string;
+  role: Role;
   iat: number;
   exp: number;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
 }
 
 function getSecret(): ArrayBuffer | null {
@@ -38,7 +53,8 @@ async function sign(payload: string): Promise<string | null> {
   return `${payload}.${sigHex}`;
 }
 
-async function verify(token: string): Promise<SessionPayload | null> {
+// Exportada (antes era privada `verify`) para ser testável direto por token.
+export async function verifyToken(token: string): Promise<SessionPayload | null> {
   const lastDot = token.lastIndexOf(".");
   if (lastDot === -1) return null;
 
@@ -74,6 +90,8 @@ async function verify(token: string): Promise<SessionPayload | null> {
     if (!valid) return null;
 
     const parsed: SessionPayload = JSON.parse(payload);
+    // Exige identidade: cookies antigos (sem sub) e papéis inválidos são rejeitados.
+    if (!parsed.sub || (parsed.role !== "admin" && parsed.role !== "member")) return null;
     if (parsed.exp < Math.floor(Date.now() / 1000)) return null;
     return parsed;
   } catch {
@@ -81,10 +99,13 @@ async function verify(token: string): Promise<SessionPayload | null> {
   }
 }
 
-export async function createSession(): Promise<string | null> {
+export async function createSession(user: SessionUser): Promise<string | null> {
   const now = Math.floor(Date.now() / 1000);
   const payload: SessionPayload = {
-    authenticated: true,
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
     iat: now,
     exp: now + SESSION_MAX_AGE,
   };
@@ -104,7 +125,7 @@ export async function verifySession(
   }
 
   if (!token) return null;
-  return verify(token);
+  return verifyToken(token);
 }
 
 export function getSessionCookieOptions() {

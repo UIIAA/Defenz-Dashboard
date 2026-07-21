@@ -17,10 +17,27 @@ export function LoginForm() {
       )}
       <div>
         <label
+          htmlFor="email"
+          className="block text-sm font-medium text-slate-700 mb-2"
+        >
+          E-mail
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="username"
+          required
+          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all text-slate-900 bg-white placeholder-slate-400"
+          placeholder="voce@defenz.com.br"
+        />
+      </div>
+      <div>
+        <label
           htmlFor="password"
           className="block text-sm font-medium text-slate-700 mb-2"
         >
-          Senha de Acesso
+          Senha
         </label>
         <input
           id="password"
