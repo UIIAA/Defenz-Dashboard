@@ -1,7 +1,7 @@
 # Spec — Farol 100% no /metas + coluna Robô no /diario + filtro de semana (Seg–Sex)
 
 > **Origem:** pedidos do Marcos na sessão de 2026-07-13 (conversa vai ser resetada; continuar por esta spec).
-> **Status:** Draft aprovado nas decisões-chave (ver §Decisões). **Nada implementado ainda** — só investigação feita. Spec-first: revisar e então implementar.
+> **Status:** ✅ **IMPLEMENTADO (2026-07-14)** — código + testes verdes + build ok, e n8n editado ao vivo. Ver §Implementação (landed) no fim.
 > **Base:** o Farol de Metas Fase 1+2 + separação de fonte de receita JÁ está em produção (`main` @ `e580552`). Esta spec são os AJUSTES em cima disso. Contexto profundo na memória local `farol-metas-fase1-2.md`.
 
 ## Onde estamos (o que já está no ar)
@@ -63,3 +63,27 @@
 
 ## Notas de segurança
 - Callbox: usar as credenciais do node **"Callbox Login"** do snapshot (não colocar senha em código/repo). API: login `POST /callbox-api/login` → token no campo `data`; calls `POST /callbox-api/relatorios/bilhetagem/tab_chamadas` com Bearer, body `{filter_start_date, filter_end_date, page}` (datas `YYYY-MM-DD`, `page` no body).
+
+---
+
+## Implementação (landed — 2026-07-14)
+
+**Resolução dos §Abertos:**
+1. **Histórico do robô:** backfill dos 3 dias pedidos (10, 13, 14/07) via re-run do webhook do snapshot. O `ligacoes`-tab **já tinha** as chamadas do robô sob `agente="Suporte"` (10/07=61, 13/07=72, 14/07=71), então bastou o mapeamento — sem mexer no `Format Ligacoes Raw`. Re-run é **upsert por data** (não duplica) e as métricas manuais (destaques/e-mails) **re-derivam** da aba `Metricas` (persistente) → sem degradação (verificado célula a célula).
+2. **Colunas da tabela:** `Gustavo · Leonardo · Marcos · Robô` (renomeado "Marcos/Sup." → "Marcos").
+3. **Robô:** mostra o total de ligações realizadas (mesmo padrão das outras colunas de pessoa; atendidas ficam no JSON `por_vendedor` mas não são exibidas por coluna).
+4. **Layout /metas:** Farol (semana+mês) no topo → "Por que bati" (última fechada) OU Consolidado (em modo intervalo) → Comparativo. Filtro de intervalo reusa o `DateRangePicker`.
+5. **"Por que bati" num intervalo:** **Consolidado do período** (Σ receita vs meta 6k×N + Σ esforço) + comparativo semana-a-semana.
+
+**Decisão nova (não estava na spec):** o Farol do /metas agora é **defenz-only** (particionado por `fonteVenda`), não o total. Motivo: o /metas inteiro conta só Venda Defenz na meta — um Farol total-based contradiria a página ("batido" no total vs "não bati" no defenz). O Repasse SS aparece como Farol paralelo informativo (`farolRepasse`) numa sub-linha de cada bucket.
+
+**Mudança n8n (aplicada ao vivo em `aMhvdTP5aAi0Z1sf`, node Parse Ligacoes):**
+- VMAP ganhou `'suporte':'Robô'` (cobre o tab-path histórico: `agente="Suporte"` → Robô).
+- Path live (Callbox) ganhou detecção de ramal: extrai o número entre `<...>` no `origin`; `ramal==='102'` → `'Robô'` (mais robusto que por nome).
+
+**Arquivos tocados (dashboard):** `src/lib/metas.ts` (Seg-Sex em `weeklyEsforco`; `computeMetas` ganhou `range` + `consolidado`), `src/lib/types.ts` (`MetasConsolidado`, `MetasPeriodo`, `MetasResponse` com `consolidado/periodo/farol/farolRepasse`; removido `farol` de `ResumoDiarioResponse`), `src/app/api/metas/route.ts` (from/to + farol defenz/repasse), `src/app/api/resumo-diario/route.ts` (removido computeFarol), `src/components/metas/MetasDashboard.tsx` (Farol + consolidado + picker), `src/components/diario/ResumoDiarioDashboard.tsx` (coluna Robô, sem FarolCard), `FarolCard.tsx` deletado. Testes em `src/lib/metas.test.ts` (68 no total, verdes).
+
+**Pendências / follow-ups:**
+- Cron 17h50 seg–sex já roda o snapshot com o VMAP novo → Robô popula sozinho daqui pra frente.
+- Marcos: marcar no Zoho os deals de Venda Defenz (tag) pra separar de repasse na meta (segue valendo, ortogonal a esta feature).
+- **Não commitado** ainda (aguardando o Marcos pedir commit/deploy).

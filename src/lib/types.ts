@@ -680,7 +680,6 @@ export interface ResumoDiarioResponse {
   floor: string;                   // data mínima navegável (YYYY-MM-DD)
   base_atual: ResumoBaseInstalada | null; // base instalada mais recente (estado atual)
   periodo: PeriodoInfo | null;     // preenchido quando a resposta é um intervalo agregado
-  farol: Farol | null;             // Farol de Metas (semana/mês ao vivo); null se deals indisponíveis
   _cached?: boolean;
   _cacheAge?: number;
 }
@@ -745,9 +744,37 @@ export interface WeekMetric {
   diagnostico: string; // heurístico determinístico "por que bati/não bati"
 }
 
+// Somatório de uma janela de N semanas (Seg–Sex no esforço, Seg–Dom na receita).
+// Usado no /metas quando o usuário seleciona um intervalo (consolidado do período)
+// e sempre presente para reconciliar totais. Ver feature-metas-robo-semana §3.
+export interface MetasConsolidado {
+  weekStart: string;      // segunda da semana mais antiga da janela
+  weekEnd: string;        // domingo da semana mais recente da janela
+  nWeeks: number;         // nº de semanas na janela
+  revenue: number;        // Σ Venda Defenz (alimenta meta/cor/label)
+  revenueRepasse: number; // Σ Repasse SS (informativo)
+  revenueTotal: number;   // revenue + revenueRepasse
+  goal: number;           // GOAL_WEEK × nWeeks
+  pctAbs: number;         // revenue / goal
+  cor: FarolCor;
+  label: FarolLabel;
+  esforco: WeekEsforco;   // Σ esforço (Seg–Sex) das semanas
+}
+
+// Preenchido quando a resposta do /metas é um intervalo selecionado (várias semanas).
+export interface MetasPeriodo {
+  from: string;   // YYYY-MM-DD selecionado
+  to: string;     // YYYY-MM-DD selecionado
+  nWeeks: number; // nº de semanas resolvidas no intervalo
+}
+
 export interface MetasResponse {
-  semanas: WeekMetric[]; // mais recente primeiro
-  generatedAt: string;   // ISO do instante de cálculo
+  semanas: WeekMetric[];          // mais recente primeiro
+  consolidado: MetasConsolidado;  // somatório da janela retornada
+  periodo: MetasPeriodo | null;   // preenchido quando um intervalo foi selecionado
+  farol: Farol | null;            // Farol ao vivo (semana/mês), receita = Venda Defenz
+  farolRepasse: Farol | null;     // idem, mas receita = Repasse SS (informativo)
+  generatedAt: string;            // ISO do instante de cálculo
   _cached?: boolean;
   _cacheAge?: number;
 }

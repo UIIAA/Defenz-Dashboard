@@ -12,7 +12,6 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DiarioCard } from './DiarioCard';
-import { FarolCard } from './FarolCard';
 import { DayNavigator, type DiarioView } from './DayNavigator';
 import { useResumoDiario } from '@/hooks/useResumoDiario';
 import { todayBRT } from '@/lib/resumo-diario';
@@ -34,23 +33,26 @@ function PorCanalTable({ r }: { r: ResumoDiario }) {
   const vcell = (map: Record<string, number> | null, name: string) =>
     map === null ? '—' : nf(map[name] ?? 0);
 
+  // Robô = ramal 102 do Callbox (disca sozinho). Só faz ligação → só aparece na linha
+  // Telefonia; nas demais fica "—". O n8n (snapshot) mapeia ramal 102 → bucket "Robô"
+  // em ligacoes.por_vendedor (feature-metas-robo-semana §2).
   const rows = [
     { ind: 'Telefonia', total: dash(r.ligacoes.total), conv: `${nf(r.ligacoes.atendidas)} (${r.ligacoes.taxa}%)`,
-      g: nf(callsVend('Gustavo')), l: nf(callsVend('Leonardo')), ms: nf(callsVend('Marcos')), obs: 'ligações realizadas' },
+      g: nf(callsVend('Gustavo')), l: nf(callsVend('Leonardo')), ms: nf(callsVend('Marcos')), rb: nf(callsVend('Robô')), obs: 'ligações realizadas' },
     { ind: 'E-mail', total: dash(r.emails.total), conv: '—',
-      g: vcell(r.emails.por_sender, 'Gustavo'), l: vcell(r.emails.por_sender, 'Leonardo'), ms: vcell(r.emails.por_sender, 'Marcos'),
+      g: vcell(r.emails.por_sender, 'Gustavo'), l: vcell(r.emails.por_sender, 'Leonardo'), ms: vcell(r.emails.por_sender, 'Marcos'), rb: '—',
       obs: r.coverage.emails_source === 'chat' ? 'fonte: chat' : 'fonte: planilha' },
-    { ind: 'WhatsApp', total: dash(r.whatsapp.msgs), conv: dash(r.whatsapp.convs), g: '—', l: '—', ms: '—', obs: 'mensagens / conversas' },
+    { ind: 'WhatsApp', total: dash(r.whatsapp.msgs), conv: dash(r.whatsapp.convs), g: '—', l: '—', ms: '—', rb: '—', obs: 'mensagens / conversas' },
     { ind: 'LinkedIn', total: r.linkedin.page === null && r.linkedin.perfis === null ? '—' : nf((r.linkedin.page ?? 0) + (r.linkedin.perfis ?? 0)),
-      conv: '—', g: '—', l: '—', ms: '—', obs: `${r.linkedin.page ?? 0} Page · ${r.linkedin.perfis ?? 0} perfis` },
+      conv: '—', g: '—', l: '—', ms: '—', rb: '—', obs: `${r.linkedin.page ?? 0} Page · ${r.linkedin.perfis ?? 0} perfis` },
     { ind: 'Apresentações', total: dash(r.apresentacoes.total), conv: '—',
-      g: vcell(r.apresentacoes.por_vendedor, 'Gustavo'), l: vcell(r.apresentacoes.por_vendedor, 'Leonardo'), ms: vcell(r.apresentacoes.por_vendedor, 'Marcos'),
+      g: vcell(r.apresentacoes.por_vendedor, 'Gustavo'), l: vcell(r.apresentacoes.por_vendedor, 'Leonardo'), ms: vcell(r.apresentacoes.por_vendedor, 'Marcos'), rb: '—',
       obs: r.apresentacoes.aproximado ? 'aproximado (~)' : (r.apresentacoes.total ? 'enviadas' : 'sem envios') },
     { ind: 'Propostas', total: dash(r.propostas.total), conv: '—',
-      g: vcell(r.propostas.por_vendedor, 'Gustavo'), l: vcell(r.propostas.por_vendedor, 'Leonardo'), ms: vcell(r.propostas.por_vendedor, 'Marcos'),
+      g: vcell(r.propostas.por_vendedor, 'Gustavo'), l: vcell(r.propostas.por_vendedor, 'Leonardo'), ms: vcell(r.propostas.por_vendedor, 'Marcos'), rb: '—',
       obs: r.propostas.aproximado ? 'aproximado (~)' : (r.propostas.total ? 'enviadas' : 'sem envios') },
     { ind: 'Reunião técnica', total: dash(r.reuniao_tecnica.total), conv: '—',
-      g: vcell(r.reuniao_tecnica.por_vendedor, 'Gustavo'), l: vcell(r.reuniao_tecnica.por_vendedor, 'Leonardo'), ms: vcell(r.reuniao_tecnica.por_vendedor, 'Marcos'),
+      g: vcell(r.reuniao_tecnica.por_vendedor, 'Gustavo'), l: vcell(r.reuniao_tecnica.por_vendedor, 'Leonardo'), ms: vcell(r.reuniao_tecnica.por_vendedor, 'Marcos'), rb: '—',
       obs: r.reuniao_tecnica.total ? 'registradas' : 'sem registros' },
   ];
 
@@ -69,7 +71,8 @@ function PorCanalTable({ r }: { r: ResumoDiario }) {
               <th scope="col" className="px-3 py-2 font-semibold text-right">Atend./Conv.</th>
               <th scope="col" className="px-3 py-2 font-semibold text-right">Gustavo</th>
               <th scope="col" className="px-3 py-2 font-semibold text-right">Leonardo</th>
-              <th scope="col" className="px-3 py-2 font-semibold text-right">Marcos/Sup.</th>
+              <th scope="col" className="px-3 py-2 font-semibold text-right">Marcos</th>
+              <th scope="col" className="px-3 py-2 font-semibold text-right">Robô</th>
               <th scope="col" className="px-5 py-2 font-semibold">Obs.</th>
             </tr>
           </thead>
@@ -82,6 +85,7 @@ function PorCanalTable({ r }: { r: ResumoDiario }) {
                 <td className="px-3 py-2.5 text-right tabular-nums">{row.g}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{row.l}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{row.ms}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{row.rb}</td>
                 <td className="px-5 py-2.5 text-slate-400 text-xs">{row.obs}</td>
               </tr>
             ))}
@@ -90,7 +94,7 @@ function PorCanalTable({ r }: { r: ResumoDiario }) {
               <td className="px-3 py-3 text-right tabular-nums font-bold text-red-700">
                 {dash(r.total_tracao)}{r.coverage.partial_tracao ? '*' : ''}
               </td>
-              <td colSpan={3} />
+              <td colSpan={4} />
               <td className="px-5 py-3 text-slate-400 text-xs">
                 {r.coverage.partial_tracao ? '* soma parcial (canais sem dado)' : 'volume bruto dos canais'}
               </td>
@@ -266,9 +270,6 @@ export const ResumoDiarioDashboard = () => {
           {r && !isPeriodo && <CoverageBadges r={r} />}
         </div>
       </div>
-
-      {/* Farol de Metas (semana/mês ao vivo) — independente de ter snapshot no dia */}
-      {response?.farol && <FarolCard farol={response.farol} />}
 
       {error ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">

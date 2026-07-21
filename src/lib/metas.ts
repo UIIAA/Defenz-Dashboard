@@ -6,8 +6,8 @@
 // Ver docs/features/feature-farol-metas.md — seção "Fase 2 — Landed" — e
 // docs/features/feature-metas-fonte-receita.md (separação Venda Defenz × Repasse SS).
 
-import type { RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta } from './types';
-import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade } from './farol';
+import type { RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta, MetasConsolidado } from './types';
+import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade, isoDow } from './farol';
 import { isClosedWon, dateInRange, classifyOrigin } from './metrics';
 import { dedupeByData, parseResumoRow } from './resumo-diario';
 
@@ -47,7 +47,9 @@ export function weekRevenue(deals: RawDeal[], weekStart: string, weekEnd: string
   return { defenz, repasse };
 }
 
-// Soma os campos de esforço da aba resumo_diario para os dias dentro de [weekStart, weekEnd].
+// Soma os campos de esforço da aba resumo_diario para os dias ÚTEIS (Seg–Sex) dentro
+// de [weekStart, weekEnd]. Sáb/Dom não entram no esforço/ritmo (feature-metas-robo-semana
+// §4) — a receita continua atribuída Seg→Dom em weekRevenue (deal de fim de semana conta).
 // Campos Captured<number> (podem vir null) contam como 0 na soma semanal — não há como
 // distinguir "não capturado" de "zero" depois de somar múltiplos dias.
 export function weeklyEsforco(
@@ -57,7 +59,7 @@ export function weeklyEsforco(
 ): WeekEsforco {
   const rows = dedupeByData(resumoRows)
     .map(parseResumoRow)
-    .filter(r => DATE_RE.test(r.data) && r.data >= weekStart && r.data <= weekEnd);
+    .filter(r => DATE_RE.test(r.data) && r.data >= weekStart && r.data <= weekEnd && isoDow(r.data) <= 5);
 
   const sum = (get: (r: ReturnType<typeof parseResumoRow>) => number | null) =>
     rows.reduce((s, r) => s + (get(r) ?? 0), 0);
@@ -94,6 +96,7 @@ interface WeekRaw {
   revenue: number;         // Venda Defenz — alimenta meta/pctAbs/cor/label/diagnóstico
   revenueRepasse: number;  // Repasse SS — informativo
   revenueTotal: number;    // defenz + repasse
+  expected: number;        // esperado pelo pace no instante (semana fechada = GOAL_WEEK)
   esforco: WeekEsforco;
 }
 
@@ -142,41 +145,96 @@ function diagnosticar(delta: WeekDelta, batido: boolean, hasPrev: boolean): stri
   return `Meta não batida — ${parts.join(' e ')}.`;
 }
 
-// `now` define a semana atual (BRT); as `nWeeks` semanas ISO (Seg–Dom) são geradas
-// pra trás a partir dela, mais recente primeiro. A semana mais antiga da janela não
-// tem "semana anterior" dentro do próprio recorte → delta null (decisão de escopo:
-// não buscamos uma semana extra só pra isso).
+// Segundas (YYYY-MM-DD) da janela, mais recente primeiro. Sem `range`: as `nWeeks`
+// semanas a partir da atual. Com `range`: toda semana cuja segunda cai em
+// [mondayOf(from), mondayOf(to)] — cap defensivo de 60 semanas.
+function weekStartsFor(
+  currentWeekStart: string,
+  nWeeks: number,
+  range?: { from: string; to: string }
+): string[] {
+  if (range) {
+    const first = mondayOf(range.from <= range.to ? range.from : range.to);
+    const last = mondayOf(range.from <= range.to ? range.to : range.from);
+    const out: string[] = [];
+    let w = last;
+    for (let i = 0; i < 60 && w >= first; i++) { out.push(w); w = addDays(w, -7); }
+    return out.length ? out : [currentWeekStart];
+  }
+  return Array.from({ length: Math.max(1, nWeeks) }, (_, i) => addDays(currentWeekStart, -7 * i));
+}
+
+const zeroEsforco = (): WeekEsforco => ({ ligacoes: 0, emails: 0, apresentacoes: 0, propostas: 0, reunioes: 0 });
+
+// Somatório das semanas da janela (Σ receita / Σ esforço / meta = 6k × nº semanas).
+function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
+  const nWeeks = raw.length;
+  const esforco = raw.reduce<WeekEsforco>((acc, w) => ({
+    ligacoes: acc.ligacoes + w.esforco.ligacoes,
+    emails: acc.emails + w.esforco.emails,
+    apresentacoes: acc.apresentacoes + w.esforco.apresentacoes,
+    propostas: acc.propostas + w.esforco.propostas,
+    reunioes: acc.reunioes + w.esforco.reunioes,
+  }), zeroEsforco());
+  const revenue = raw.reduce((s, w) => s + w.revenue, 0);
+  const revenueRepasse = raw.reduce((s, w) => s + w.revenueRepasse, 0);
+  const expected = raw.reduce((s, w) => s + w.expected, 0);
+  const goal = GOAL_WEEK * nWeeks;
+  // raw é mais-recente-primeiro: a mais antiga é a última, a mais recente é a primeira.
+  const oldest = raw[raw.length - 1];
+  const newest = raw[0];
+  return {
+    weekStart: oldest.weekStart,
+    weekEnd: newest.weekEnd,
+    nWeeks,
+    revenue,
+    revenueRepasse,
+    revenueTotal: revenue + revenueRepasse,
+    goal,
+    pctAbs: goal > 0 ? revenue / goal : 0,
+    esforco,
+    ...grade(revenue, goal, expected),
+  };
+}
+
+// `now` define a semana atual (BRT). Sem `range`, geram-se as `nWeeks` semanas ISO
+// (Seg–Dom) pra trás a partir dela; com `range`, as semanas cujas segundas caem no
+// intervalo. Sempre mais recente primeiro. A semana mais antiga da janela não tem
+// "semana anterior" dentro do próprio recorte → delta null (decisão de escopo).
 export function computeMetas(
   deals: RawDeal[],
   resumoRows: RawResumoDiario[],
   now: Date,
-  nWeeks = 8
-): { semanas: WeekMetric[] } {
+  nWeeks = 8,
+  range?: { from: string; to: string }
+): { semanas: WeekMetric[]; consolidado: MetasConsolidado } {
   const p = brtParts(now);
   const currentWeekStart = mondayOf(p.date);
   const elapsedCurrent = weekElapsed(p);
 
-  const raw: WeekRaw[] = Array.from({ length: nWeeks }, (_, i) => {
-    const weekStart = addDays(currentWeekStart, -7 * i);
+  const raw: WeekRaw[] = weekStartsFor(currentWeekStart, nWeeks, range).map(weekStart => {
     const weekEnd = addDays(weekStart, 6);
     const rev = weekRevenue(deals, weekStart, weekEnd);
+    // Semana encerrada: 100% do pace → expected = goal. Semana em andamento: pace real
+    // (rampa Seg 08h→Sex 23:59 do Farol). Semana futura (só em modo range): 0.
+    const expected =
+      weekStart < currentWeekStart ? GOAL_WEEK :
+      weekStart === currentWeekStart ? GOAL_WEEK * elapsedCurrent :
+      0;
     return {
       weekStart,
       weekEnd,
       revenue: rev.defenz,
       revenueRepasse: rev.repasse,
       revenueTotal: rev.defenz + rev.repasse,
+      expected,
       esforco: weeklyEsforco(resumoRows, weekStart, weekEnd),
     };
   });
 
   const semanas: WeekMetric[] = raw.map((cur, i) => {
     const prev = raw[i + 1];
-    const isCurrent = cur.weekStart === currentWeekStart;
-    // Semana já encerrada: 100% do pace decorrido → expected = goal. Semana em
-    // andamento: pace real (mesma rampa Seg 08h→Sex 23:59 do Farol Fase 1).
-    const expected = isCurrent ? GOAL_WEEK * elapsedCurrent : GOAL_WEEK;
-    const { cor, label } = grade(cur.revenue, GOAL_WEEK, expected);
+    const { cor, label } = grade(cur.revenue, GOAL_WEEK, cur.expected);
     const pctAbs = cur.revenue / GOAL_WEEK;
     const delta = computeDelta(cur, prev);
     const batido = pctAbs >= 1;
@@ -197,5 +255,5 @@ export function computeMetas(
     };
   });
 
-  return { semanas };
+  return { semanas, consolidado: buildConsolidado(raw) };
 }

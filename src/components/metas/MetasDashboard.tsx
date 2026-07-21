@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Target, RefreshCcw, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus,
+  Target, CalendarDays, RefreshCcw, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus, X,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
@@ -10,12 +10,16 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import type { WeekMetric, MetasResponse, FarolCor } from '@/lib/types';
+import type { WeekMetric, MetasResponse, MetasConsolidado, FarolBucket, FarolCor } from '@/lib/types';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import type { RangeSelection } from '@/lib/date-range';
+import { todayBRT, addDays } from '@/lib/resumo-diario';
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 const nf = (n: number) => n.toLocaleString('pt-BR');
 const pct = (n: number) => `${Math.round(n * 100)}%`;
+const fmt = (s: string) => { try { return format(new Date(`${s}T12:00:00`), 'dd/MM', { locale: ptBR }); } catch { return s; } };
 
 const COR: Record<FarolCor, { dot: string; bar: string; text: string; ring: string; bg: string }> = {
   verde: { dot: 'bg-emerald-500', bar: 'bg-emerald-500', text: 'text-emerald-600', ring: 'ring-emerald-500/20', bg: 'bg-emerald-50' },
@@ -32,9 +36,7 @@ const ESFORCO_ITEMS: { key: keyof WeekMetric['esforco']; label: string }[] = [
 ];
 
 function weekLabel(w: WeekMetric): string {
-  const s = format(new Date(`${w.weekStart}T12:00:00`), 'dd/MM', { locale: ptBR });
-  const e = format(new Date(`${w.weekEnd}T12:00:00`), 'dd/MM', { locale: ptBR });
-  return `${s}–${e}`;
+  return `${fmt(w.weekStart)}–${fmt(w.weekEnd)}`;
 }
 
 function DeltaBadge({ v, label }: { v: number | null; label?: string }) {
@@ -54,35 +56,31 @@ function DeltaBadge({ v, label }: { v: number | null; label?: string }) {
   );
 }
 
-function WeekHeaderCard({ w }: { w: WeekMetric }) {
-  const c = COR[w.cor];
-  const fill = Math.min(Math.max(w.pctAbs, 0), 1) * 100;
+// ─── Farol ao vivo (semana + mês) — receita = Venda Defenz; Repasse SS informativo ──
+function FarolBucketCard({ icon: Icon, title, b, repasse }: { icon: typeof Target; title: string; b: FarolBucket; repasse: number }) {
+  const c = COR[b.cor];
+  const fill = Math.min(Math.max(b.pctAbs, 0), 1) * 100;
+  const expectedPct = b.goal > 0 ? Math.min(Math.max(b.expected / b.goal, 0), 1) * 100 : 0;
   return (
-    <div className={`rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5 ring-1 ${c.ring}`}>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">Semana Atual</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{weekLabel(w)}</p>
+    <div className={`flex-1 rounded-xl bg-white/60 border border-slate-200/60 p-4 ring-1 ${c.ring}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 text-slate-500">
+          <Icon size={16} strokeWidth={2} />
+          <span className="text-xs font-bold uppercase tracking-widest font-display">{title}</span>
         </div>
-        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.bg} ${c.text}`}>
+        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${c.text}`}>
           <span className={`h-2 w-2 rounded-full ${c.dot}`} />
-          {w.label}
+          {b.label}
         </span>
       </div>
-
       <div className="flex items-baseline gap-2">
-        <span className="text-3xl lg:text-4xl font-semibold tracking-tight text-slate-900 font-display tabular-nums">
-          {brl(w.revenue)}
-        </span>
-        <span className="text-sm text-slate-400 tabular-nums">/ {brl(w.goal)} meta</span>
+        <span className="text-2xl lg:text-3xl font-semibold tracking-tight text-slate-900 font-display tabular-nums">{brl(b.revenue)}</span>
+        <span className="text-sm text-slate-400 tabular-nums">/ {brl(b.goal)}</span>
       </div>
-      {w.revenueRepasse > 0 && (
-        <p className="mt-1 text-xs text-slate-400">
-          + <span className="font-medium text-slate-500 tabular-nums">{brl(w.revenueRepasse)}</span> repasse SS (fora da meta)
-        </p>
+      {repasse > 0 && (
+        <p className="mt-0.5 text-[11px] text-slate-400">+ <span className="font-medium text-slate-500 tabular-nums">{brl(repasse)}</span> repasse SS (fora da meta)</p>
       )}
-
-      <div className="relative mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+      <div className="relative mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${fill}%` }}
@@ -90,15 +88,87 @@ function WeekHeaderCard({ w }: { w: WeekMetric }) {
           className={`absolute inset-y-0 left-0 rounded-full ${c.bar}`}
         />
       </div>
-
+      <div className="relative h-0">
+        {expectedPct > 0 && expectedPct < 100 && (
+          <div className="absolute -top-2 h-2 w-0.5 bg-slate-400" style={{ left: `${expectedPct}%` }} title={`Esperado pelo ritmo: ${brl(b.expected)}`} />
+        )}
+      </div>
       <div className="mt-2 flex items-center justify-between text-xs">
-        <span className={`font-bold tabular-nums ${c.text}`}>{pct(w.pctAbs)} da meta</span>
-        <span className="text-slate-400">semana em andamento</span>
+        <span className={`font-bold tabular-nums ${c.text}`}>{pct(b.pctAbs)} da meta</span>
+        <span className="text-slate-400 tabular-nums">esperado {brl(b.expected)}</span>
       </div>
     </div>
   );
 }
 
+function FarolMetas({ res }: { res: MetasResponse }) {
+  if (!res.farol) return null;
+  const rep = res.farolRepasse;
+  return (
+    <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">Farol — onde estou agora</h2>
+        <span className="text-[11px] text-slate-400">meta R$ 6.000/semana · ao vivo</span>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <FarolBucketCard icon={Target} title="Semana" b={res.farol.semana} repasse={rep?.semana.revenue ?? 0} />
+        <FarolBucketCard icon={CalendarDays} title="Mês" b={res.farol.mes} repasse={rep?.mes.revenue ?? 0} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Consolidado do intervalo (Σ receita / Σ esforço da janela de semanas) ──────
+function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
+  const cor = COR[c.cor];
+  const fill = Math.min(Math.max(c.pctAbs, 0), 1) * 100;
+  return (
+    <div className={`rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5 ring-1 ${cor.ring}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">Consolidado do período</h2>
+          <p className="text-xs text-slate-400 mt-0.5">{fmt(c.weekStart)}–{fmt(c.weekEnd)} · {c.nWeeks} {c.nWeeks === 1 ? 'semana' : 'semanas'}</p>
+        </div>
+        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cor.bg} ${cor.text}`}>
+          <span className={`h-2 w-2 rounded-full ${cor.dot}`} />
+          {c.label}
+        </span>
+      </div>
+
+      <div className="flex items-baseline gap-2">
+        <span className="text-3xl lg:text-4xl font-semibold tracking-tight text-slate-900 font-display tabular-nums">{brl(c.revenue)}</span>
+        <span className="text-sm text-slate-400 tabular-nums">/ {brl(c.goal)} meta ({c.nWeeks} × R$6k)</span>
+      </div>
+      {c.revenueRepasse > 0 && (
+        <p className="mt-1 text-xs text-slate-400">+ <span className="font-medium text-slate-500 tabular-nums">{brl(c.revenueRepasse)}</span> repasse SS (fora da meta)</p>
+      )}
+
+      <div className="relative mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${fill}%` }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className={`absolute inset-y-0 left-0 rounded-full ${cor.bar}`}
+        />
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs">
+        <span className={`font-bold tabular-nums ${cor.text}`}>{pct(c.pctAbs)} da meta do período</span>
+        <span className="text-slate-400">esforço somado (Seg–Sex)</span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {ESFORCO_ITEMS.map(it => (
+          <div key={it.key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{it.label}</p>
+            <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">{nf(c.esforco[it.key])}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── "Por que bati / não bati" (uma semana fechada) ─────────────────────────────
 function PorqueBloco({ w, isRetro }: { w: WeekMetric; isRetro: boolean }) {
   const c = COR[w.cor];
   return (
@@ -121,8 +191,7 @@ function PorqueBloco({ w, isRetro }: { w: WeekMetric; isRetro: boolean }) {
   );
 }
 
-// Tooltip customizado (não dá pra usar só `formatter`): precisamos mostrar o total
-// (Venda Defenz + Repasse SS) junto das duas séries empilhadas + Meta + Esforço.
+// Tooltip customizado: total (Venda Defenz + Repasse SS) + Meta + Esforço.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ReceitaTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -145,7 +214,7 @@ function ReceitaTooltip({ active, payload, label }: any) {
   );
 }
 
-function ComparativoChart({ semanas }: { semanas: WeekMetric[] }) {
+function ComparativoChart({ semanas, isInterval }: { semanas: WeekMetric[]; isInterval: boolean }) {
   const data = [...semanas].reverse().map(w => ({
     label: weekLabel(w),
     receitaDefenz: w.revenue,
@@ -159,7 +228,7 @@ function ComparativoChart({ semanas }: { semanas: WeekMetric[] }) {
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
       <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">
-        Comparativo — últimas {semanas.length} semanas
+        {isInterval ? `Semana a semana no período (${semanas.length})` : `Comparativo — últimas ${semanas.length} semanas`}
       </h2>
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
@@ -178,16 +247,25 @@ function ComparativoChart({ semanas }: { semanas: WeekMetric[] }) {
   );
 }
 
+// ─── Main ───────────────────────────────────────────────────────────────────────
 export const MetasDashboard = () => {
+  const today = useMemo(() => todayBRT(), []);
+  const floor = useMemo(() => addDays(today, -364), [today]);
+
+  const [sel, setSel] = useState<RangeSelection | null>(null); // null = padrão (últimas 8 semanas)
   const [response, setResponse] = useState<MetasResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const query = sel
+    ? (sel.kind === 'dia' ? `from=${sel.data}&to=${sel.data}` : `from=${sel.from}&to=${sel.to}`)
+    : '';
+
+  const fetchData = useCallback(async (q: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/metas');
+      const res = await fetch(`/api/metas${q ? `?${q}` : ''}`);
       if (!res.ok) throw new Error(`Falha ao carregar (${res.status})`);
       const json = (await res.json()) as MetasResponse;
       setResponse(json);
@@ -198,16 +276,16 @@ export const MetasDashboard = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(query); }, [fetchData, query]);
 
   const semanas = response?.semanas ?? [];
-  const atual = semanas[0];
-  // "Bati/não bati" é retrospectivo → analisa a última semana FECHADA (comparação
-  // justa full-vs-full). O header mostra a semana atual ao vivo (pace). semanas[0]
-  // sempre contém hoje (em andamento), então a última fechada é semanas[1].
-  const retro = semanas.length > 1 ? semanas[1] : atual;
+  const isInterval = !!response?.periodo;
+  // "Bati/não bati" (modo padrão) → última semana FECHADA (semanas[1]); semanas[0] é a atual em andamento.
+  const retro = semanas.length > 1 ? semanas[1] : semanas[0];
+
+  const selLabel = !sel
+    ? 'Últimas 8 semanas'
+    : sel.kind === 'dia' ? `Semana de ${fmt(sel.data)}` : `${fmt(sel.from)} – ${fmt(sel.to)}`;
 
   return (
     <div className="space-y-6">
@@ -216,10 +294,31 @@ export const MetasDashboard = () => {
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 font-display">Farol de Metas</h1>
           <p className="text-red-600 text-sm font-bold tracking-wide mt-1">META SEMANAL R$ 6.000 · POR QUE BATI / NÃO BATI</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-full p-1 shadow-sm">
+            <DateRangePicker
+              value={sel ?? { kind: 'dia', data: today }}
+              floor={floor}
+              today={today}
+              onChange={setSel}
+              disabled={loading}
+              hint="Escolha 1 semana (1 clique) ou um intervalo de semanas (2 cliques)"
+              trigger={
+                <button className="px-3 py-1 flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-red-600 transition-colors">
+                  <CalendarDays size={14} className="text-red-500" />
+                  <span className="whitespace-nowrap">{selLabel}</span>
+                </button>
+              }
+            />
+            {sel && (
+              <button onClick={() => setSel(null)} title="Voltar ao padrão (8 semanas)" className="p-1.5 rounded-full text-slate-400 hover:bg-slate-50 hover:text-red-600 transition-colors">
+                <X size={14} />
+              </button>
+            )}
+          </div>
           {response?._cached && <span className="text-xs text-amber-500">cache</span>}
           <button
-            onClick={fetchData}
+            onClick={() => fetchData(query)}
             disabled={loading}
             title="Atualizar"
             className="p-2 rounded-full bg-white/80 border border-slate-200/60 text-slate-500 hover:text-red-600 hover:border-red-200 shadow-sm transition-colors disabled:opacity-50"
@@ -233,7 +332,7 @@ export const MetasDashboard = () => {
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <AlertTriangle size={36} className="text-red-500 mb-3" />
           <p className="text-slate-600">{error}</p>
-          <button onClick={fetchData} className="mt-4 px-4 py-2 text-sm rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">
+          <button onClick={() => fetchData(query)} className="mt-4 px-4 py-2 text-sm rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">
             Tentar novamente
           </button>
         </div>
@@ -242,7 +341,7 @@ export const MetasDashboard = () => {
           <Loader2 size={36} className="animate-spin text-red-500 mb-4" />
           <p className="text-slate-400 text-sm">Carregando metas...</p>
         </div>
-      ) : !atual ? (
+      ) : !semanas.length ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Target size={32} className="text-slate-300 mb-3" />
           <p className="text-lg text-slate-600">Sem dados suficientes para calcular as metas</p>
@@ -251,13 +350,16 @@ export const MetasDashboard = () => {
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
           <p className="text-xs text-slate-400">
-            Aqui a meta conta só a <span className="font-medium text-slate-500">Venda Defenz</span>; o Repasse SS é informativo. O Farol de Metas do /diario soma o total (Venda Defenz + Repasse SS) — por isso os dois podem divergir.
+            Aqui a meta conta só a <span className="font-medium text-slate-500">Venda Defenz</span>; o Repasse SS é informativo. O esforço (ligações, e-mails, apresentações, propostas, reuniões) conta de <span className="font-medium text-slate-500">segunda a sexta</span>; a receita segue atribuída à semana inteira (Seg–Dom).
           </p>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-4">
-            <WeekHeaderCard w={atual} />
-            <PorqueBloco w={retro} isRetro={semanas.length > 1} />
-          </div>
-          {semanas.length > 1 && <ComparativoChart semanas={semanas} />}
+
+          {response && <FarolMetas res={response} />}
+
+          {isInterval && response?.consolidado
+            ? <ConsolidadoCard c={response.consolidado} />
+            : retro && <PorqueBloco w={retro} isRetro={semanas.length > 1} />}
+
+          {semanas.length > 1 && <ComparativoChart semanas={semanas} isInterval={isInterval} />}
         </motion.div>
       )}
     </div>

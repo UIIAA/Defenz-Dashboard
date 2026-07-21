@@ -119,6 +119,16 @@ describe('weeklyEsforco — soma os campos de esforço dos dias da semana', () =
     expect(e).toEqual({ ligacoes: 30, emails: 13, apresentacoes: 1, propostas: 3, reunioes: 1 });
   });
 
+  it('esforço conta só Seg–Sex: sábado (18/07) e domingo (19/07) são ignorados', () => {
+    const rows = [
+      resumo('2026-07-17', { ligacoes_total: 10 }), // sexta → conta
+      resumo('2026-07-18', { ligacoes_total: 100 }), // sábado → NÃO conta no esforço
+      resumo('2026-07-19', { ligacoes_total: 50 }),  // domingo → NÃO conta no esforço
+    ];
+    const e = weeklyEsforco(rows, '2026-07-13', '2026-07-19');
+    expect(e.ligacoes).toBe(10);
+  });
+
   it('dedupe por data: mantém só a linha com atualizado_em mais recente', () => {
     const rows = [
       resumo('2026-07-13', { ligacoes_total: 10, atualizado_em: '2026-07-13T10:00:00.000Z' } as Partial<RawResumoDiario>),
@@ -289,5 +299,70 @@ describe('computeMetas — diagnóstico "por que bati/não bati"', () => {
     const maisAntiga = semanas[2];
     expect(maisAntiga.diagnostico.length).toBeGreaterThan(0);
     expect(maisAntiga.diagnostico).toMatch(/sem semana anterior/i);
+  });
+});
+
+describe('computeMetas — consolidado (somatório das semanas da janela)', () => {
+  const now = new Date('2026-07-29T15:00:00Z'); // Wed, semana atual 27/07–02/08
+  const deals: RawDeal[] = [
+    won(6000, '2026-07-28'), // semana atual 27/07–02/08 (defenz)
+    won(3000, '2026-07-22'), // semana 20–26/07
+    won(6000, '2026-07-14'), // semana 13–19/07
+  ];
+  const resumoRows: RawResumoDiario[] = [
+    resumo('2026-07-27', { ligacoes_total: 10, emails_total: 30 }),
+    resumo('2026-07-20', { ligacoes_total: 40, emails_total: 20 }),
+    resumo('2026-07-13', { ligacoes_total: 50, emails_total: 25 }),
+  ];
+
+  it('soma receita e esforço de todas as semanas da janela', () => {
+    const { consolidado } = computeMetas(deals, resumoRows, now, 3);
+    expect(consolidado.nWeeks).toBe(3);
+    expect(consolidado.revenue).toBe(15000);          // 6000 + 3000 + 6000
+    expect(consolidado.goal).toBe(18000);             // 6000 × 3
+    expect(consolidado.esforco.ligacoes).toBe(100);   // 10 + 40 + 50
+    expect(consolidado.esforco.emails).toBe(75);      // 30 + 20 + 25
+  });
+
+  it('a janela vai da segunda mais antiga ao domingo mais recente', () => {
+    const { consolidado } = computeMetas(deals, resumoRows, now, 3);
+    expect(consolidado.weekStart).toBe('2026-07-13'); // segunda da mais antiga
+    expect(consolidado.weekEnd).toBe('2026-08-02');   // domingo da atual
+  });
+
+  it('separa Venda Defenz de Repasse SS no consolidado', () => {
+    const mix: RawDeal[] = [
+      { ...won(4000, '2026-07-28'), lead_source: 'Apollo' },        // defenz
+      { ...won(2000, '2026-07-22'), lead_source: 'Parceiro SS' },   // repasse
+    ];
+    const { consolidado } = computeMetas(mix, [], now, 3);
+    expect(consolidado.revenue).toBe(4000);
+    expect(consolidado.revenueRepasse).toBe(2000);
+    expect(consolidado.revenueTotal).toBe(6000);
+  });
+});
+
+describe('computeMetas — modo intervalo (range de semanas)', () => {
+  const now = new Date('2026-07-29T15:00:00Z');
+
+  it('gera as semanas cujas segundas caem em [from, to], mais recente primeiro', () => {
+    // range cobre segundas 06/07 e 13/07 → 2 semanas
+    const { semanas } = computeMetas([], [], now, 8, { from: '2026-07-06', to: '2026-07-19' });
+    expect(semanas).toHaveLength(2);
+    expect(semanas[0].weekStart).toBe('2026-07-13');
+    expect(semanas[1].weekStart).toBe('2026-07-06');
+  });
+
+  it('consolidado do intervalo usa meta = R$6k × nº de semanas do intervalo', () => {
+    const { consolidado } = computeMetas([], [], now, 8, { from: '2026-07-06', to: '2026-07-19' });
+    expect(consolidado.nWeeks).toBe(2);
+    expect(consolidado.goal).toBe(12000);
+  });
+
+  it('um único dia dentro de uma semana resolve para aquela semana', () => {
+    const { semanas } = computeMetas([], [], now, 8, { from: '2026-07-15', to: '2026-07-15' });
+    expect(semanas).toHaveLength(1);
+    expect(semanas[0].weekStart).toBe('2026-07-13');
+    expect(semanas[0].weekEnd).toBe('2026-07-19');
   });
 });
