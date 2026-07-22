@@ -4,16 +4,19 @@ import {
   Phone, Calendar, Presentation, FileText, Trophy,
   AlertTriangle, RefreshCcw, Loader2, Download, DollarSign
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DataHealthPanel, getHealth } from '@/components/dashboard/DataHealthPanel';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { useDashboardData } from '@/hooks/useDashboardData';
+import { useChannelTargets } from '@/hooks/useChannelTargets';
 import { useDateRange } from '@/providers/DateRangeProvider';
-import { formatCurrency } from '@/lib/formatters';
-import type { DataSource, CoverageSourceStats, ReceitaPorCanalMetrics } from '@/lib/types';
+import { formatCurrency, getDateBounds } from '@/lib/formatters';
+import { metaPeriodo, diasNoPeriodo } from '@/lib/metas-canal';
+import { grade } from '@/lib/farol';
+import type { DataSource, CoverageSourceStats, ReceitaPorCanalMetrics, ChannelTargets, CanalCategoria, FarolCor } from '@/lib/types';
 
 const CoverageTooltip = ({
   base, aba, coluna, stats,
@@ -50,82 +53,131 @@ const DataSourceBadge = ({ source }: { source: DataSource }) => (
   </span>
 );
 
-const CANAL_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
-  direto:      { bg: 'bg-blue-50',   text: 'text-blue-700',   bar: 'bg-blue-500' },
-  parceiro:    { bg: 'bg-violet-50', text: 'text-violet-700', bar: 'bg-violet-500' },
-  securisoft:  { bg: 'bg-red-50',    text: 'text-red-700',    bar: 'bg-red-500' },
+// feature-metas-canal (Spec 2, §3): identidade de CANAL é dado neutro (grafite →
+// cinza claro), nunca cor de alarme — SecuriSoft não pode "ler" como vermelho.
+// Cor de STATUS (atingimento de meta) é separada e usa a paleta de farol.
+const CANAL_DOT: Record<string, string> = {
+  direto:      'bg-slate-700',   // #334155
+  parceiro:    'bg-slate-500',   // #64748b
+  securisoft:  'bg-slate-300',   // #cbd5e1
+};
+
+const STATUS_BAR: Record<FarolCor, string> = {
+  verde: 'bg-emerald-500',
+  amarelo: 'bg-amber-500',
+  vermelho: 'bg-red-500',
+};
+
+const STATUS_TEXT: Record<FarolCor, string> = {
+  verde: 'text-emerald-700',
+  amarelo: 'text-amber-700',
+  vermelho: 'text-red-700',
+};
+
+// Barra de atingimento (meta <= 0 → some, per spec §1: meta não definida esconde
+// a barra/status e mostra só o valor).
+const AttainmentBar = ({ valor, meta, label }: { valor: number; meta: number; label: string }) => {
+  if (meta <= 0) return null;
+  const cor = grade(valor, meta, meta).cor;
+  const pct = Math.round((valor / meta) * 100);
+  const width = Math.min(100, Math.max(0, pct));
+  return (
+    <div className="mt-2 space-y-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200/70">
+        <div className={`h-full ${STATUS_BAR[cor]} transition-all duration-700`} style={{ width: `${width}%` }} />
+      </div>
+      <p className={`text-[11px] font-semibold ${STATUS_TEXT[cor]}`}>
+        {label} · {pct}% da meta do período
+      </p>
+    </div>
+  );
 };
 
 const ReceitaPorCanalSection = ({
   receita,
   loading,
+  metaCanal,
 }: {
   receita: ReceitaPorCanalMetrics;
   loading: boolean;
-}) => (
-  <div className="space-y-3">
-    <div className="flex items-center gap-2">
-      <DollarSign size={16} className="text-slate-400" />
-      <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Financeiro — Receita por Canal</h2>
-    </div>
+  metaCanal: ChannelTargets;
+}) => {
+  const totalMeta = metaCanal.direto + metaCanal.parceiro + metaCanal.securisoft;
 
-    {/* Barra de proporção horizontal */}
-    <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
-      {receita.canais.map(c => (
-        c.percentual > 0 && (
-          <div
-            key={c.categoria}
-            className={`${CANAL_COLORS[c.categoria]?.bar ?? 'bg-slate-400'} transition-all duration-700`}
-            style={{ width: `${c.percentual}%` }}
-            title={`${c.label}: ${c.percentual}%`}
-          />
-        )
-      ))}
-    </div>
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <DollarSign size={16} className="text-slate-400" />
+        <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Financeiro — Receita por Canal</h2>
+      </div>
 
-    {/* Cards por canal */}
-    <div className="grid grid-cols-3 gap-4">
-      {receita.canais.map(canal => {
-        const colors = CANAL_COLORS[canal.categoria] ?? { bg: 'bg-slate-50', text: 'text-slate-700', bar: 'bg-slate-400' };
-        return (
-          <div
-            key={canal.categoria}
-            className={`${colors.bg} rounded-xl p-4 border border-white/60 shadow-sm`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className={`text-xs font-bold uppercase tracking-wider ${colors.text}`}>
-                {canal.label}
-              </span>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 ${colors.text}`}>
-                {canal.percentual}%
-              </span>
+      {/* Barra de proporção horizontal — identidade neutra por canal (dado) */}
+      <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
+        {receita.canais.map(c => (
+          c.percentual > 0 && (
+            <div
+              key={c.categoria}
+              className={`${CANAL_DOT[c.categoria] ?? 'bg-slate-400'} transition-all duration-700`}
+              style={{ width: `${c.percentual}%` }}
+              title={`${c.label}: ${c.percentual}%`}
+            />
+          )
+        ))}
+      </div>
+
+      {/* Cards por canal */}
+      <div className="grid grid-cols-3 gap-4">
+        {receita.canais.map(canal => {
+          const meta = metaCanal[canal.categoria as CanalCategoria] ?? 0;
+          return (
+            <div
+              key={canal.categoria}
+              className="rounded-xl p-4 border border-slate-200/70 bg-slate-50/60 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <span className={`h-2 w-2 rounded-full ${CANAL_DOT[canal.categoria] ?? 'bg-slate-400'}`} />
+                  {canal.label}
+                </span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 text-slate-500">
+                  {canal.percentual}% do total
+                </span>
+              </div>
+              <p className="text-xl font-bold text-slate-700 tabular-nums">
+                {formatCurrency(canal.valor_fechado)}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Comissao: {formatCurrency(canal.comissao_fechado)}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {canal.deals} {canal.deals === 1 ? 'deal' : 'deals'} fechados
+              </p>
+              <AttainmentBar valor={canal.valor_fechado} meta={meta} label={formatCurrency(meta)} />
             </div>
-            <p className={`text-xl font-bold ${colors.text} tabular-nums`}>
-              {formatCurrency(canal.valor_fechado)}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              Comissao: {formatCurrency(canal.comissao_fechado)}
-            </p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {canal.deals} {canal.deals === 1 ? 'deal' : 'deals'} fechados
-            </p>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
 
-    {/* Totais */}
-    <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
-      <span>Total: <span className="font-semibold text-slate-700">{formatCurrency(receita.total_valor)}</span></span>
-      <span>Comissao total: <span className="font-semibold text-slate-700">{formatCurrency(receita.total_comissao)}</span></span>
-      <span>{receita.total_deals} deals fechados no periodo</span>
+      {/* Consolidado Total — Σ receita vs Σ metas escaladas, mesma regra de cor */}
+      <div className="rounded-xl p-4 border border-slate-300/70 bg-slate-100/60">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Total</span>
+          <span className="text-xs text-slate-400">{receita.total_deals} deals fechados no periodo</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xl font-bold text-slate-700 tabular-nums">{formatCurrency(receita.total_valor)}</p>
+          <p className="text-xs text-slate-500">Comissao total: {formatCurrency(receita.total_comissao)}</p>
+        </div>
+        <AttainmentBar valor={receita.total_valor} meta={totalMeta} label="Total" />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const ExecutiveDashboard = () => {
   const [exporting, setExporting] = useState(false);
   const { dateRange } = useDateRange();
+  const { targets } = useChannelTargets();
   const {
     data,
     loading,
@@ -145,6 +197,20 @@ export const ExecutiveDashboard = () => {
   } = useDashboardData(dateRange);
 
   const hasComparison = comparisonLabel !== '';
+
+  // feature-metas-canal (Spec 2, Task 4) — reusa o MESMO decode de dateRange que
+  // useDashboardData/API já usam (getDateBounds, de src/lib/formatters.ts) pra
+  // não inventar uma segunda leitura do preset/custom range.
+  const metaCanal: ChannelTargets = useMemo(() => {
+    if (!targets) return { direto: 0, parceiro: 0, securisoft: 0 };
+    const { data_inicio, data_fim } = getDateBounds(dateRange);
+    const dias = diasNoPeriodo(data_inicio, data_fim);
+    return {
+      direto: metaPeriodo(targets.direto, dias),
+      parceiro: metaPeriodo(targets.parceiro, dias),
+      securisoft: metaPeriodo(targets.securisoft, dias),
+    };
+  }, [targets, dateRange]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -350,7 +416,11 @@ export const ExecutiveDashboard = () => {
 
         {/* Financeiro: receita por canal */}
         {receitaPorCanal && receitaPorCanal.total_valor > 0 && (
-          <ReceitaPorCanalSection receita={receitaPorCanal} loading={loading} />
+          <ReceitaPorCanalSection
+            receita={receitaPorCanal}
+            loading={loading}
+            metaCanal={metaCanal}
+          />
         )}
       </motion.div>
     </AnimatePresence>
