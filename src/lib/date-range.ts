@@ -2,6 +2,8 @@
 // Compartilhado entre DayNavigator (Resumo Diário) e DateFilter (Exec/Operacional).
 // Tudo em YYYY-MM-DD (BRT), string-compare. NÃO usa Date local (evita drift de fuso).
 
+import { mondayOf, addDays } from './farol';
+
 // Seleção normalizada que a UI conhece. `dia` = 1 data; `periodo` = intervalo from<=to.
 export type RangeSelection =
   | { kind: 'dia'; data: string }
@@ -50,4 +52,25 @@ export function encodeCustom(sel: RangeSelection): string {
 export function decodeCustom(s: string): RangeSelection {
   const [, from, to] = s.split(':');
   return rangeSel(from, to ?? from);
+}
+
+// Presets do seletor de intervalo do /metas v2 (feature-metas-v2-faturamento-esforco
+// §6). `today` = YYYY-MM-DD (BRT). Sempre retorna `periodo` com from<=to.
+export type PresetKey = '8sem' | '12sem' | 'este-mes' | 'mes-passado' | 'trimestre';
+
+export function presetRange(key: PresetKey, today: string): RangeSelection {
+  const [y, m] = today.split('-').map(Number);
+  const firstOfMonth = `${today.slice(0, 8)}01`;
+  switch (key) {
+    case '8sem':  return { kind: 'periodo', from: addDays(mondayOf(today), -7 * 7), to: today };
+    case '12sem': return { kind: 'periodo', from: addDays(mondayOf(today), -7 * 11), to: today };
+    case 'este-mes': return { kind: 'periodo', from: firstOfMonth, to: today };
+    case 'mes-passado': {
+      const pm = m === 1 ? 12 : m - 1; const py = m === 1 ? y - 1 : y;
+      const first = `${py}-${String(pm).padStart(2, '0')}-01`;
+      const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+      return { kind: 'periodo', from: first, to: `${py}-${String(pm).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}` };
+    }
+    case 'trimestre': return { kind: 'periodo', from: addDays(today, -89), to: today };
+  }
 }

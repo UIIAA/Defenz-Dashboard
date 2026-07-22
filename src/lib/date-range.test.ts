@@ -6,6 +6,7 @@ import {
   clampSelection,
   encodeCustom,
   decodeCustom,
+  presetRange,
 } from './date-range';
 
 describe('date-range — construtores', () => {
@@ -76,5 +77,18 @@ describe('date-range — encode/decode custom (compat DateFilter/DateRangeProvid
   it('encode∘decode é idempotente num intervalo', () => {
     const sel = rangeSel('2026-07-01', '2026-07-31');
     expect(decodeCustom(encodeCustom(sel))).toEqual(sel);
+  });
+});
+
+describe('presetRange (today = 2026-07-22, quarta)', () => {
+  const today = '2026-07-22';
+  it('8 semanas = segunda de 8 semanas atrás → hoje', () => {
+    expect(presetRange('8sem', today)).toEqual({ kind: 'periodo', from: '2026-06-01', to: '2026-07-22' });
+  });
+  it('este-mes', () => {
+    expect(presetRange('este-mes', today)).toEqual({ kind: 'periodo', from: '2026-07-01', to: '2026-07-22' });
+  });
+  it('mes-passado', () => {
+    expect(presetRange('mes-passado', today)).toEqual({ kind: 'periodo', from: '2026-06-01', to: '2026-06-30' });
   });
 });
