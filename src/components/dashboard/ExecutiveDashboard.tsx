@@ -2,13 +2,14 @@
 
 import {
   Phone, Calendar, Presentation, FileText, Trophy,
-  AlertTriangle, RefreshCcw, Loader2, Download, DollarSign
+  AlertTriangle, RefreshCcw, Loader2, Download, DollarSign, Pencil
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FunnelChart } from '@/components/charts/FunnelChart';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DataHealthPanel, getHealth } from '@/components/dashboard/DataHealthPanel';
+import { ChannelTargetsEditor } from '@/components/dashboard/ChannelTargetsEditor';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useChannelTargets } from '@/hooks/useChannelTargets';
@@ -96,80 +97,111 @@ const AttainmentBar = ({ valor, meta, label }: { valor: number; meta: number; la
 const ReceitaPorCanalSection = ({
   receita,
   loading,
+  targets,
   metaCanal,
+  canEdit,
+  onReload,
 }: {
   receita: ReceitaPorCanalMetrics;
   loading: boolean;
+  targets: ChannelTargets | null;
   metaCanal: ChannelTargets;
+  canEdit: boolean;
+  onReload: () => void;
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
   const totalMeta = metaCanal.direto + metaCanal.parceiro + metaCanal.securisoft;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <DollarSign size={16} className="text-slate-400" />
-        <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Financeiro — Receita por Canal</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DollarSign size={16} className="text-slate-400" />
+          <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">Financeiro — Receita por Canal</h2>
+        </div>
+        {canEdit && !isEditing && (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+            title="Editar metas por canal"
+          >
+            <Pencil size={14} />
+          </button>
+        )}
       </div>
 
-      {/* Barra de proporção horizontal — identidade neutra por canal (dado) */}
-      <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
-        {receita.canais.map(c => (
-          c.percentual > 0 && (
-            <div
-              key={c.categoria}
-              className={`${CANAL_DOT[c.categoria] ?? 'bg-slate-400'} transition-all duration-700`}
-              style={{ width: `${c.percentual}%` }}
-              title={`${c.label}: ${c.percentual}%`}
-            />
-          )
-        ))}
-      </div>
+      {isEditing && targets ? (
+        <ChannelTargetsEditor
+          targets={targets}
+          onCancel={() => setIsEditing(false)}
+          onSaved={() => {
+            onReload();
+            setIsEditing(false);
+          }}
+        />
+      ) : (
+        <>
+          {/* Barra de proporção horizontal — identidade neutra por canal (dado) */}
+          <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
+            {receita.canais.map(c => (
+              c.percentual > 0 && (
+                <div
+                  key={c.categoria}
+                  className={`${CANAL_DOT[c.categoria] ?? 'bg-slate-400'} transition-all duration-700`}
+                  style={{ width: `${c.percentual}%` }}
+                  title={`${c.label}: ${c.percentual}%`}
+                />
+              )
+            ))}
+          </div>
 
-      {/* Cards por canal */}
-      <div className="grid grid-cols-3 gap-4">
-        {receita.canais.map(canal => {
-          const meta = metaCanal[canal.categoria as CanalCategoria] ?? 0;
-          return (
-            <div
-              key={canal.categoria}
-              className="rounded-xl p-4 border border-slate-200/70 bg-slate-50/60 shadow-sm"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
-                  <span className={`h-2 w-2 rounded-full ${CANAL_DOT[canal.categoria] ?? 'bg-slate-400'}`} />
-                  {canal.label}
-                </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 text-slate-500">
-                  {canal.percentual}% do total
-                </span>
-              </div>
-              <p className="text-xl font-bold text-slate-700 tabular-nums">
-                {formatCurrency(canal.valor_fechado)}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Comissao: {formatCurrency(canal.comissao_fechado)}
-              </p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {canal.deals} {canal.deals === 1 ? 'deal' : 'deals'} fechados
-              </p>
-              <AttainmentBar valor={canal.valor_fechado} meta={meta} label={formatCurrency(meta)} />
+          {/* Cards por canal */}
+          <div className="grid grid-cols-3 gap-4">
+            {receita.canais.map(canal => {
+              const meta = metaCanal[canal.categoria as CanalCategoria] ?? 0;
+              return (
+                <div
+                  key={canal.categoria}
+                  className="rounded-xl p-4 border border-slate-200/70 bg-slate-50/60 shadow-sm"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
+                      <span className={`h-2 w-2 rounded-full ${CANAL_DOT[canal.categoria] ?? 'bg-slate-400'}`} />
+                      {canal.label}
+                    </span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 text-slate-500">
+                      {canal.percentual}% do total
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-700 tabular-nums">
+                    {formatCurrency(canal.valor_fechado)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Comissao: {formatCurrency(canal.comissao_fechado)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {canal.deals} {canal.deals === 1 ? 'deal' : 'deals'} fechados
+                  </p>
+                  <AttainmentBar valor={canal.valor_fechado} meta={meta} label={formatCurrency(meta)} />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Consolidado Total — Σ receita vs Σ metas escaladas, mesma regra de cor */}
+          <div className="rounded-xl p-4 border border-slate-300/70 bg-slate-100/60">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Total</span>
+              <span className="text-xs text-slate-400">{receita.total_deals} deals fechados no periodo</span>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Consolidado Total — Σ receita vs Σ metas escaladas, mesma regra de cor */}
-      <div className="rounded-xl p-4 border border-slate-300/70 bg-slate-100/60">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Total</span>
-          <span className="text-xs text-slate-400">{receita.total_deals} deals fechados no periodo</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <p className="text-xl font-bold text-slate-700 tabular-nums">{formatCurrency(receita.total_valor)}</p>
-          <p className="text-xs text-slate-500">Comissao total: {formatCurrency(receita.total_comissao)}</p>
-        </div>
-        <AttainmentBar valor={receita.total_valor} meta={totalMeta} label="Total" />
-      </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xl font-bold text-slate-700 tabular-nums">{formatCurrency(receita.total_valor)}</p>
+              <p className="text-xs text-slate-500">Comissao total: {formatCurrency(receita.total_comissao)}</p>
+            </div>
+            <AttainmentBar valor={receita.total_valor} meta={totalMeta} label="Total" />
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -177,7 +209,7 @@ const ReceitaPorCanalSection = ({
 export const ExecutiveDashboard = () => {
   const [exporting, setExporting] = useState(false);
   const { dateRange } = useDateRange();
-  const { targets } = useChannelTargets();
+  const { targets, canEdit, reload: reloadTargets } = useChannelTargets();
   const {
     data,
     loading,
@@ -419,7 +451,10 @@ export const ExecutiveDashboard = () => {
           <ReceitaPorCanalSection
             receita={receitaPorCanal}
             loading={loading}
+            targets={targets}
             metaCanal={metaCanal}
+            canEdit={canEdit}
+            onReload={reloadTargets}
           />
         )}
       </motion.div>

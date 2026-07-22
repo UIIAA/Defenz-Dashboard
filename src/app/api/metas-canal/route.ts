@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 import { getChannelTargets, setChannelTargets } from "@/lib/metas-canal";
-import type { ChannelTargets } from "@/lib/types";
+import type { CanalCategoria, ChannelTargets } from "@/lib/types";
 
 // feature-metas-canal (Spec 2) — GET (qualquer sessão válida) + PUT (só admin).
 // Primeira rota de escrita gated por papel do dashboard: reusa `role` do
 // verifySession (feature-auth-individual). Sem cache — são metas de gestão,
 // baixo volume de leitura, e a escrita precisa refletir imediatamente.
+
+const CATEGORIAS: CanalCategoria[] = ["direto", "parceiro", "securisoft"];
 
 export async function GET(req: NextRequest) {
   const session = await verifySession(req);
@@ -19,11 +21,27 @@ export async function PUT(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = (await req.json()) as Partial<ChannelTargets>;
-  const clean = (n: unknown) => Math.max(0, Number(n) || 0);
-  await setChannelTargets(
-    { direto: clean(body.direto), parceiro: clean(body.parceiro), securisoft: clean(body.securisoft) },
-    session.email
-  );
+  const body = (await req.json().catch(() => null)) as Partial<Record<CanalCategoria, unknown>> | null;
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Bad Request: corpo ausente ou inválido" }, { status: 400 });
+  }
+
+  // Hardening (review Spec 2): um payload parcial (canal ausente ou não-numérico)
+  // NUNCA é coagido a 0 — isso zeraria silenciosamente a meta de um canal. Exige
+  // os 3 valores numéricos >= 0 no corpo, senão 400. O editor inline sempre manda
+  // os 3 (seed do estado atual), então isso só barra chamadas malformadas.
+  const clean: Partial<ChannelTargets> = {};
+  for (const categoria of CATEGORIAS) {
+    const value = body[categoria];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return NextResponse.json(
+        { error: `Bad Request: '${categoria}' ausente ou não-numérico (>= 0 obrigatório)` },
+        { status: 400 }
+      );
+    }
+    clean[categoria] = value;
+  }
+
+  await setChannelTargets(clean as ChannelTargets, session.email);
   return NextResponse.json(await getChannelTargets());
 }
