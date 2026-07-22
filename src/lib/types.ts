@@ -77,16 +77,20 @@ export interface RawDeal {
 
 // --- Base instalada (drill-down por empresa, feature-base-instalada-drilldown) ---
 
+export type SetupStatus = 'na-console' | 'em-setup' | 'recusou' | 'nao-iniciado';
+
 export interface BaseInstaladaCliente {
   empresa: string;
   licencas: number;
   negocios: number;
+  setup: SetupStatus;
 }
 
 export interface BaseInstalada {
   clientes: BaseInstaladaCliente[];
   totalClientes: number;
   totalLicencas: number;
+  setupConcluidoPct: number;
 }
 
 export interface RawReuniao {
