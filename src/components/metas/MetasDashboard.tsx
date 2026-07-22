@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Legend,
+  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Legend, Cell, LabelList,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -235,8 +235,18 @@ function ReceitaTooltip({ active, payload, label }: any) {
   );
 }
 
-function ComparativoChart({ semanas, isInterval }: { semanas: WeekMetric[]; isInterval: boolean }) {
-  const data = [...semanas].reverse().map(w => ({
+// Uma linha por semana (mais antiga → mais recente), reusada pelos 3 gráficos independentes.
+interface ChartRow {
+  label: string;
+  receitaDefenz: number;
+  receitaRepasse: number;
+  receitaTotal: number;
+  meta: number;
+  esforcoTotal: number;
+}
+
+function buildChartData(semanas: WeekMetric[]): ChartRow[] {
+  return [...semanas].reverse().map(w => ({
     label: weekLabel(w),
     receitaDefenz: w.revenue,
     receitaRepasse: w.revenueRepasse,
@@ -245,25 +255,64 @@ function ComparativoChart({ semanas, isInterval }: { semanas: WeekMetric[]; isIn
     esforcoTotal:
       w.esforco.ligacoes + w.esforco.emails + w.esforco.apresentacoes + w.esforco.propostas + w.esforco.reunioes,
   }));
+}
 
+const labelK = (label: string | number | boolean | null | undefined) => {
+  const v = Number(label) || 0;
+  return v ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}k` : '';
+};
+const tickK = (v: number) => `${v / 1000}k`;
+
+// Gráfico A — Receita Defenz vs Meta. Cor de dado por atingimento (nunca vermelho por padrão):
+// grafite (bateu) · cinza médio (quase, ≥80%) · cinza claro (abaixo). Semana em curso (última
+// barra) some com opacidade — evita "acusar" uma semana que mal começou.
+function ReceitaMetaChart({ data, isInterval }: { data: ChartRow[]; isInterval: boolean }) {
+  const barColor = (rev: number, meta: number) => {
+    const pctAbs = meta > 0 ? rev / meta : 0;
+    if (pctAbs >= 1) return '#334155';
+    if (pctAbs >= 0.8) return '#94a3b8';
+    return '#cbd5e1';
+  };
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
       <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">
-        {isInterval ? `Semana a semana no período (${semanas.length})` : `Comparativo — últimas ${semanas.length} semanas`}
+        {isInterval ? `Receita Defenz vs Meta — semana a semana (${data.length})` : `Receita Defenz vs Meta — últimas ${data.length} semanas`}
       </h2>
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
+        <ComposedChart data={data} margin={{ top: 20, right: 8, bottom: 4, left: 0 }}>
           <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-          <YAxis yAxisId="rev" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-          <YAxis yAxisId="esf" orientation="right" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+          <YAxis domain={[0, (max: number) => Math.max(max, 8000)]} tickFormatter={tickK} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
           <ReTooltip content={ReceitaTooltip} />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Venda Defenz" stackId="receita" fill="#dc2626" maxBarSize={40} />
-          <Bar yAxisId="rev" dataKey="receitaRepasse" name="Repasse SS" stackId="receita" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Line yAxisId="rev" type="monotone" dataKey="meta" name="Meta (R$6k)" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
-          <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço total" stroke="#0ea5e9" strokeWidth={1.5} dot={{ r: 2 }} />
+          <Line type="monotone" dataKey="meta" name="Meta (R$6k)" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
+          <Bar dataKey="receitaDefenz" name="Venda Defenz" minPointSize={3} maxBarSize={48} radius={[4, 4, 0, 0]}>
+            <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#64748b' }} />
+            {data.map((row, i) => (
+              <Cell key={row.label} fill={barColor(row.receitaDefenz, row.meta)} fillOpacity={i === data.length - 1 ? 0.45 : 1} />
+            ))}
+          </Bar>
         </ComposedChart>
       </ResponsiveContainer>
+      <p className="mt-2 text-[11px] text-slate-400">última barra = semana em curso</p>
+    </div>
+  );
+}
+
+// Gráfico B — Repasse SS. Informativo: não conta na meta semanal, por isso um único
+// neutro claro (sem gradação por atingimento — não há "meta" pro repasse).
+function RepasseChart({ data }: { data: ChartRow[] }) {
+  return (
+    <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Repasse SS</h2>
+      <ResponsiveContainer width="100%" height={180}>
+        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+          <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+          <YAxis tickFormatter={tickK} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+          <ReTooltip content={ReceitaTooltip} />
+          <Bar dataKey="receitaRepasse" name="Repasse SS" fill="#cbd5e1" maxBarSize={48} radius={[4, 4, 0, 0]} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <p className="mt-2 text-[11px] text-slate-400">Informativo — não conta na meta semanal.</p>
     </div>
   );
 }
@@ -299,10 +348,11 @@ export const MetasDashboard = () => {
 
   useEffect(() => { fetchData(query); }, [fetchData, query]);
 
-  const semanas = response?.semanas ?? [];
+  const semanas = useMemo(() => response?.semanas ?? [], [response]);
   const isInterval = !!response?.periodo;
   // "Bati/não bati" (modo padrão) → última semana FECHADA (semanas[1]); semanas[0] é a atual em andamento.
   const retro = semanas.length > 1 ? semanas[1] : semanas[0];
+  const chartData = useMemo(() => buildChartData(semanas), [semanas]);
 
   const selLabel = !sel
     ? 'Últimas 8 semanas'
@@ -383,7 +433,12 @@ export const MetasDashboard = () => {
             ? <ConsolidadoCard c={response.consolidado} />
             : retro && <PorqueBloco w={retro} isRetro={semanas.length > 1} />}
 
-          {semanas.length > 1 && <ComparativoChart semanas={semanas} isInterval={isInterval} />}
+          {semanas.length > 1 && (
+            <>
+              <ReceitaMetaChart data={chartData} isInterval={isInterval} />
+              <RepasseChart data={chartData} />
+            </>
+          )}
         </motion.div>
       )}
     </div>
