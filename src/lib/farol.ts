@@ -8,7 +8,6 @@ import { isClosedWon, dateInRange } from './metrics';
 
 // --- Config (defaults da spec §2/§9) ---
 export const GOAL_WEEK = 6000;          // meta semanal fixa
-const AMARELO = 0.8;                    // threshold amarelo (≥ 0.8×esperado)
 const STRICT_WON = false;               // false → reusa isClosedWon (inclui "contrato enviado", reconcilia com o dashboard)
 
 const TZ = 'America/Sao_Paulo';
@@ -93,7 +92,7 @@ export function grade(revenue: number, goal: number, expected: number): { cor: F
   const pctAbs = goal > 0 ? revenue / goal : 0;
   if (pctAbs >= 1) return { cor: 'verde', label: 'batido' };
   if (revenue >= expected) return { cor: 'verde', label: 'no ritmo' };
-  if (revenue >= AMARELO * expected) return { cor: 'amarelo', label: 'atrás' };
+  if (pctAbs >= 0.5) return { cor: 'amarelo', label: 'atrás' };   // era: revenue >= AMARELO * expected
   return { cor: 'vermelho', label: 'fora do ritmo' };
 }
 

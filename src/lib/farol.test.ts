@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFarol } from './farol';
+import { computeFarol, grade } from './farol';
 import type { RawDeal } from './types';
 
 // America/Sao_Paulo is UTC-3 year-round (Brazil dropped DST in 2019), so we pick
@@ -46,18 +46,21 @@ describe('computeFarol — semana (pace + cor)', () => {
     expect(f.semana.label).toBe('batido');
   });
 
-  it('meio de semana, entre 0.8x e 1x do esperado → amarelo / atrás', () => {
+  // Regra de cor pós-T3 (vermelho reservado a pctAbs<0.5): 2500/6000 ≈ 0.417 < 0.5
+  // → vermelho, mesmo estando abaixo do pace esperado (≈2786). Era amarelo pelo
+  // threshold antigo (revenue >= 0.8×esperado).
+  it('meio de semana, abaixo de 50% da meta → vermelho / fora do ritmo', () => {
     const now = new Date('2026-07-15T15:00:00Z'); // Wed 12:00, esperado ≈ 2786
     const f = computeFarol([won(2500, '2026-07-15')], now);
-    expect(f.semana.cor).toBe('amarelo');
-    expect(f.semana.label).toBe('atrás');
+    expect(f.semana.cor).toBe('vermelho');
+    expect(f.semana.label).toBe('fora do ritmo');
   });
 
   it('sábado é overtime: elapsed 1 → expected == meta semanal', () => {
     const now = new Date('2026-07-18T13:00:00Z'); // Sat 10:00 BRT
     const f = computeFarol([won(3000, '2026-07-15')], now);
     expect(f.semana.expected).toBe(6000);
-    expect(f.semana.cor).toBe('vermelho'); // 3000 < 0.8 * 6000
+    expect(f.semana.cor).toBe('amarelo'); // 3000/6000 = 0.5 → pctAbs>=0.5 (regra pós-T3)
   });
 
   it('atribuição por closing_date: deal fora da semana não conta', () => {
@@ -108,6 +111,18 @@ describe('computeFarol — mês (semanas-no-mês + atribuição)', () => {
     const now = new Date('2026-07-13T11:00:00Z'); // Mon 08:00 BRT, semana atual 13/07
     const f = computeFarol([], now);
     expect(f.mes.expected).toBe(6000); // 24000 * (1 semana cheia / 4)
+  });
+});
+
+describe('grade — vermelho reservado', () => {
+  it('semana fechada com 60% da meta e abaixo do pace → amarelo, não vermelho', () => {
+    expect(grade(3600, 6000, 6000).cor).toBe('amarelo'); // pctAbs 0.6, revenue<expected
+  });
+  it('semana fechada com 30% da meta → vermelho', () => {
+    expect(grade(1800, 6000, 6000).cor).toBe('vermelho'); // pctAbs 0.3
+  });
+  it('no ritmo (revenue>=expected) segue verde', () => {
+    expect(grade(1000, 6000, 800).cor).toBe('verde');
   });
 });
 

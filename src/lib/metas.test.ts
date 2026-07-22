@@ -187,23 +187,26 @@ describe('computeMetas — classificação bati/não-bati (pctAbs >= 1)', () => 
     expect(passada.label).toBe('batido');
   });
 
-  it('semana passada completa bem abaixo da meta → vermelho/fora do ritmo', () => {
+  // Regra de cor pós-T3 (vermelho reservado a pctAbs<0.5): 50% da meta é exatamente
+  // o piso do amarelo (pctAbs>=0.5), não mais vermelho.
+  it('semana passada completa em exatos 50% da meta → amarelo/atrás', () => {
     const now = new Date('2026-07-29T15:00:00Z');
     const deals = [won(3000, '2026-07-22')]; // semana 20–26/07 (passada, completa), 50% da meta
     const { semanas } = computeMetas(deals, [], now, 3);
     const passada = semanas.find(s => s.weekStart === '2026-07-20')!;
-    expect(passada.cor).toBe('vermelho');
-    expect(passada.label).toBe('fora do ritmo');
+    expect(passada.cor).toBe('amarelo');
+    expect(passada.label).toBe('atrás');
   });
 
-  it('semana atual em andamento, no ritmo esperado (reconcilia com o Farol Fase 1)', () => {
-    // Mesmo cenário de farol.test.ts: Wed 12:00 BRT, esperado ≈2786, revenue 2500 → amarelo/atrás.
+  it('semana atual em andamento, abaixo de 50% da meta (reconcilia com o Farol Fase 1)', () => {
+    // Mesmo cenário de farol.test.ts: Wed 12:00 BRT, esperado ≈2786, revenue 2500,
+    // pctAbs ≈0.417 < 0.5 → vermelho/fora do ritmo (regra de cor pós-T3).
     const now = new Date('2026-07-15T15:00:00Z');
     const deals = [won(2500, '2026-07-15')];
     const { semanas } = computeMetas(deals, [], now, 1);
     expect(semanas[0].weekStart).toBe('2026-07-13');
-    expect(semanas[0].cor).toBe('amarelo');
-    expect(semanas[0].label).toBe('atrás');
+    expect(semanas[0].cor).toBe('vermelho');
+    expect(semanas[0].label).toBe('fora do ritmo');
   });
 });
 
