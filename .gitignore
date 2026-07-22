@@ -43,3 +43,6 @@ tasks/
 
 # Claude Code local tooling
 .claude/
+
+# Superpowers brainstorm (mockups locais)
+.superpowers/
