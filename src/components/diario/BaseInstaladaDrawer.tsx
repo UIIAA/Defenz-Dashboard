@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Search, Loader2, AlertTriangle } from 'lucide-react';
-import type { BaseInstalada } from '@/lib/types';
+import type { BaseInstalada, SetupStatus } from '@/lib/types';
 
 interface BaseInstaladaDrawerProps {
   open: boolean;
@@ -12,28 +12,43 @@ interface BaseInstaladaDrawerProps {
 // feature-base-instalada-drilldown (§Padrões): DADO é neutro (grafite → cinza),
 // nunca cor de alarme — a barra de ranking por licenças usa a mesma paleta
 // neutra já usada em ExecutiveDashboard.CANAL_DOT (#334155/#64748b/#cbd5e1).
+//
+// feature-indicador-setup-taggeado (§Padrões): STATUS de setup é a ÚNICA
+// semântica colorida deste drawer — vermelho aparece SOMENTE em `recusou`.
+const SETUP_BADGE: Record<SetupStatus, { label: string; cls: string }> = {
+  'na-console': { label: 'Na console ✓', cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  'em-setup': { label: 'Em setup', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  'recusou': { label: 'Não está/recusou', cls: 'bg-red-50 text-red-700 border border-red-200' },
+  'nao-iniciado': { label: 'Não iniciado', cls: 'bg-slate-100 text-slate-500 border border-slate-200' },
+};
+
 export function BaseInstaladaDrawer({ open, onClose }: BaseInstaladaDrawerProps) {
   const [data, setData] = useState<BaseInstalada | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [pendentesOnly, setPendentesOnly] = useState(false);
 
-  // Fetch once per time the drawer is opened (cached in state for subsequent opens).
-  useEffect(() => {
-    if (!open || data || loading) return;
-    let cancelled = false;
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    fetch('/api/base-instalada')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Falha ao carregar base instalada');
-        return res.json();
-      })
-      .then((json: BaseInstalada) => { if (!cancelled) setData(json); })
-      .catch((e) => { if (!cancelled) setError(e?.message || 'Erro ao carregar base instalada'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [open, data, loading]);
+    try {
+      const res = await fetch('/api/base-instalada');
+      if (!res.ok) throw new Error('Falha ao carregar base instalada');
+      const json = (await res.json()) as BaseInstalada;
+      setData(json);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar base instalada');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch once per time the drawer is opened (mantém em cache no state para reaberturas).
+  useEffect(() => {
+    if (!open || data) return;
+    fetchData();
+  }, [open, data, fetchData]);
 
   // Escape fecha o drawer.
   useEffect(() => {
@@ -53,9 +68,17 @@ export function BaseInstaladaDrawer({ open, onClose }: BaseInstaladaDrawerProps)
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = search.trim().toLowerCase();
-    if (!q) return data.clientes;
-    return data.clientes.filter((c) => c.empresa.toLowerCase().includes(q));
-  }, [data, search]);
+    return data.clientes.filter((c) => {
+      if (pendentesOnly && c.setup === 'na-console') return false;
+      if (q && !c.empresa.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [data, search, pendentesOnly]);
+
+  const naConsoleCount = useMemo(
+    () => (data ? data.clientes.filter((c) => c.setup === 'na-console').length : 0),
+    [data]
+  );
 
   return (
     <>
@@ -99,6 +122,24 @@ export function BaseInstaladaDrawer({ open, onClose }: BaseInstaladaDrawerProps)
           </button>
         </div>
 
+        {/* Setup headline (feature-indicador-setup-taggeado §Padrões) */}
+        {data && (
+          <div className="border-b border-slate-100 px-5 py-3">
+            <div className="flex items-baseline justify-between">
+              <p className="text-sm font-semibold text-slate-700">
+                Setup concluído: <span className="text-emerald-600">{Math.round(data.setupConcluidoPct * 100)}%</span>
+              </p>
+              <p className="text-xs text-slate-400">{naConsoleCount} de {data.totalClientes} na console</p>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, Math.round(data.setupConcluidoPct * 100)))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Controls */}
         <div className="space-y-2 border-b border-slate-100 px-5 py-3">
           <div className="relative">
@@ -111,7 +152,16 @@ export function BaseInstaladaDrawer({ open, onClose }: BaseInstaladaDrawerProps)
               className="w-full rounded-lg border border-slate-200 bg-slate-50/60 py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-red-200 focus:outline-none focus:ring-2 focus:ring-red-100"
             />
           </div>
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between">
+            <label className="flex select-none items-center gap-1.5 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                checked={pendentesOnly}
+                onChange={(e) => setPendentesOnly(e.target.checked)}
+                className="rounded border-slate-300 text-red-600 focus:ring-red-200"
+              />
+              só pendentes
+            </label>
             <span
               title="Segmentação por porte/vertical — planejado para uma fase futura"
               className="cursor-not-allowed rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400"
@@ -144,12 +194,16 @@ export function BaseInstaladaDrawer({ open, onClose }: BaseInstaladaDrawerProps)
           {!loading && !error && filtered.map((c, i) => {
             const pctDaBase = data && data.totalLicencas > 0 ? (c.licencas / data.totalLicencas) * 100 : 0;
             const barWidth = maxLicencas > 0 ? (c.licencas / maxLicencas) * 100 : 0;
+            const badge = SETUP_BADGE[c.setup];
             return (
               <div key={`${c.empresa}-${i}`} className="border-b border-slate-50 py-2.5 last:border-0">
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex-1 truncate text-sm text-slate-700">
                     <span className="mr-1.5 tabular-nums text-slate-400">{i + 1}.</span>
                     {c.empresa}
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.cls}`}>
+                    {badge.label}
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
