@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DiarioCard } from './DiarioCard';
 import { DayNavigator, type DiarioView } from './DayNavigator';
+import { BaseInstaladaDrawer } from './BaseInstaladaDrawer';
 import { useResumoDiario } from '@/hooks/useResumoDiario';
 import { todayBRT } from '@/lib/resumo-diario';
 import type { ResumoDiario, ResumoSeriePoint, ResumoBaseInstalada } from '@/lib/types';
@@ -210,6 +211,7 @@ function CoverageBadges({ r }: { r: ResumoDiario }) {
 export const ResumoDiarioDashboard = () => {
   const today = useMemo(() => todayBRT(), []);
   const [view, setView] = useState<DiarioView>({ kind: 'dia', data: today });
+  const [baseDrawerOpen, setBaseDrawerOpen] = useState(false);
   const query = view.kind === 'dia' ? `data=${view.data}` : `from=${view.from}&to=${view.to}`;
   const { setQuery, response, loading, error, refetch } = useResumoDiario(`data=${today}`);
 
@@ -240,6 +242,7 @@ export const ResumoDiarioDashboard = () => {
   const baseIsCurrent = !!baseShow && !r?.base_instalada;
 
   return (
+    <>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between border-b border-slate-200 pb-4">
@@ -351,12 +354,21 @@ export const ResumoDiarioDashboard = () => {
             </div>
           )}
 
-          {/* Base instalada top contas */}
+          {/* Base instalada top contas — clicável, abre o drawer com a lista completa */}
           {baseShow && baseShow.top_contas.length > 0 && (
-            <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">
-                Base Instalada · Top Contas {baseIsCurrent && <span className="text-slate-400 normal-case font-medium">(atual)</span>}
-              </h2>
+            <button
+              type="button"
+              onClick={() => setBaseDrawerOpen(true)}
+              className="w-full rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5 text-left transition-colors hover:border-red-200/60 hover:bg-white/90 cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">
+                  Base Instalada · Top Contas {baseIsCurrent && <span className="text-slate-400 normal-case font-medium">(atual)</span>}
+                </h2>
+                <span className="text-xs font-semibold text-slate-400 hover:text-red-600 shrink-0">
+                  ver todas as {nf(baseShow.clientes_ativos)} →
+                </span>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1.5">
                 {baseShow.top_contas.slice(0, 8).map((c, i) => (
                   <div key={c.name} className="flex justify-between text-sm border-b border-slate-50 py-1.5">
@@ -370,7 +382,7 @@ export const ResumoDiarioDashboard = () => {
                   (Demais {baseShow.demais_count} contas somam {nf(baseShow.demais_licencas)} licenças)
                 </p>
               )}
-            </div>
+            </button>
           )}
 
           {/* LGPD footer */}
@@ -380,5 +392,7 @@ export const ResumoDiarioDashboard = () => {
         </motion.div>
       )}
     </div>
+    <BaseInstaladaDrawer open={baseDrawerOpen} onClose={() => setBaseDrawerOpen(false)} />
+    </>
   );
 };
