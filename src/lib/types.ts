@@ -754,6 +754,8 @@ export interface MetasConsolidado {
   revenue: number;        // Σ Venda Defenz (alimenta meta/cor/label)
   revenueRepasse: number; // Σ Repasse SS (informativo)
   revenueTotal: number;   // revenue + revenueRepasse
+  dealsDefenz: number;    // nº de negócios Venda Defenz na janela
+  dealsRepasse: number;   // nº de negócios Repasse SS na janela
   goal: number;           // GOAL_WEEK × nWeeks
   pctAbs: number;         // revenue / goal
   cor: FarolCor;

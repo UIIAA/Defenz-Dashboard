@@ -31,6 +31,8 @@ export function fonteVenda(deal: RawDeal): 'defenz' | 'repasse' {
 export interface WeekRevenueSplit {
   defenz: number;
   repasse: number;
+  defenzCount: number;
+  repasseCount: number;
 }
 
 // Receita ganha (mesma regra do Farol: isClosedWon + closing_date na janela),
@@ -38,13 +40,15 @@ export interface WeekRevenueSplit {
 export function weekRevenue(deals: RawDeal[], weekStart: string, weekEnd: string): WeekRevenueSplit {
   let defenz = 0;
   let repasse = 0;
+  let defenzCount = 0;
+  let repasseCount = 0;
   for (const d of deals) {
     if (!isClosedWon(String(d.stage || '')) || !dateInRange(d.closing_date, weekStart, weekEnd)) continue;
     const valor = Number(d.valor) || 0;
-    if (fonteVenda(d) === 'defenz') defenz += valor;
-    else repasse += valor;
+    if (fonteVenda(d) === 'defenz') { defenz += valor; defenzCount++; }
+    else { repasse += valor; repasseCount++; }
   }
-  return { defenz, repasse };
+  return { defenz, repasse, defenzCount, repasseCount };
 }
 
 // Soma os campos de esforço da aba resumo_diario para os dias ÚTEIS (Seg–Sex) dentro
@@ -96,6 +100,8 @@ interface WeekRaw {
   revenue: number;         // Venda Defenz — alimenta meta/pctAbs/cor/label/diagnóstico
   revenueRepasse: number;  // Repasse SS — informativo
   revenueTotal: number;    // defenz + repasse
+  defenzCount: number;     // nº de negócios Venda Defenz na semana
+  repasseCount: number;    // nº de negócios Repasse SS na semana
   expected: number;        // esperado pelo pace no instante (semana fechada = GOAL_WEEK)
   esforco: WeekEsforco;
 }
@@ -178,6 +184,8 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
   }), zeroEsforco());
   const revenue = raw.reduce((s, w) => s + w.revenue, 0);
   const revenueRepasse = raw.reduce((s, w) => s + w.revenueRepasse, 0);
+  const dealsDefenz = raw.reduce((s, w) => s + w.defenzCount, 0);
+  const dealsRepasse = raw.reduce((s, w) => s + w.repasseCount, 0);
   const expected = raw.reduce((s, w) => s + w.expected, 0);
   const goal = GOAL_WEEK * nWeeks;
   // raw é mais-recente-primeiro: a mais antiga é a última, a mais recente é a primeira.
@@ -190,6 +198,8 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
     revenue,
     revenueRepasse,
     revenueTotal: revenue + revenueRepasse,
+    dealsDefenz,
+    dealsRepasse,
     goal,
     pctAbs: goal > 0 ? revenue / goal : 0,
     esforco,
@@ -227,6 +237,8 @@ export function computeMetas(
       revenue: rev.defenz,
       revenueRepasse: rev.repasse,
       revenueTotal: rev.defenz + rev.repasse,
+      defenzCount: rev.defenzCount,
+      repasseCount: rev.repasseCount,
       expected,
       esforco: weeklyEsforco(resumoRows, weekStart, weekEnd),
     };

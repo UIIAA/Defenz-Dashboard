@@ -32,27 +32,27 @@ describe('weekRevenue — atribuição por closing_date (mesma regra do Farol)',
   // `defenz` (repasse = 0); a partição em si é coberta no describe dedicado abaixo.
   it('soma deals ganhos com closing_date dentro da janela', () => {
     const deals = [won(6000, '2026-07-14')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0, defenzCount: 1, repasseCount: 0 });
   });
 
   it('deal fora da janela não conta', () => {
     const deals = [won(9000, '2026-07-06')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0, defenzCount: 0, repasseCount: 0 });
   });
 
   it('valor como string é somado', () => {
     const deals = [won('6000', '2026-07-14')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0, defenzCount: 1, repasseCount: 0 });
   });
 
   it('deal em pipeline (não ganho) não conta', () => {
     const deals = [won(6000, '2026-07-14', 'Proposta Enviada')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0, defenzCount: 0, repasseCount: 0 });
   });
 
   it('"Contrato Enviado" conta como ganho', () => {
     const deals = [won(6000, '2026-07-14', 'Contrato Enviado')];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0, defenzCount: 1, repasseCount: 0 });
   });
 });
 
@@ -89,12 +89,12 @@ describe('fonteVenda — separa Venda Defenz de Repasse SS (feature-metas-fonte-
 describe('weekRevenue — particiona por fonteVenda (Venda Defenz × Repasse SS)', () => {
   it('deal securisoft sem tag conta só como repasse', () => {
     const deals: RawDeal[] = [{ ...won(6000, '2026-07-14'), lead_source: 'Parceiro SS' }];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 6000 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 6000, defenzCount: 0, repasseCount: 1 });
   });
 
   it('deal securisoft com tag "Venda Defenz" conta só como defenz', () => {
     const deals: RawDeal[] = [{ ...won(6000, '2026-07-14'), lead_source: 'Parceiro SS', tags: 'Venda Defenz' }];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0, defenzCount: 1, repasseCount: 0 });
   });
 
   it('mistura de fontes na mesma semana soma cada balde separadamente', () => {
@@ -103,7 +103,19 @@ describe('weekRevenue — particiona por fonteVenda (Venda Defenz × Repasse SS)
       { ...won(2000, '2026-07-15'), lead_source: 'Parceiro SS' },                         // repasse (sem tag)
       { ...won(1000, '2026-07-16'), lead_source: 'Parceiro SS', tags: 'venda defenz' },   // defenz (tag)
     ];
-    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 5000, repasse: 2000 });
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 5000, repasse: 2000, defenzCount: 2, repasseCount: 1 });
+  });
+});
+
+describe('weekRevenue counts', () => {
+  it('conta deals ganhos por fonte além de somar valores', () => {
+    const d0: RawDeal = { stage: 'Fechado Ganho', valor: 1000, closing_date: '2026-07-14', categoria: 'direto' };
+    const d1: RawDeal = { stage: 'Fechado Ganho', valor: 500, closing_date: '2026-07-15', lead_source: 'securisoft' };
+    const r = weekRevenue([d0, d1], '2026-07-13', '2026-07-19');
+    expect(r.defenz).toBe(1000);
+    expect(r.repasse).toBe(500);
+    expect(r.defenzCount).toBe(1);
+    expect(r.repasseCount).toBe(1);
   });
 });
 
