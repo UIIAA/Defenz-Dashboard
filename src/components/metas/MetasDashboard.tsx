@@ -118,6 +118,32 @@ function FarolMetas({ res }: { res: MetasResponse }) {
   );
 }
 
+// ─── Faturamento completo (hero) — Venda Defenz | Repasse SS | Total ───────────
+function FaturamentoCompletoCard({ c }: { c: MetasConsolidado }) {
+  return (
+    <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 border-t-2 border-t-red-600 shadow-lg shadow-slate-200/50 p-5">
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Faturamento completo · {c.nWeeks} semana{c.nWeeks === 1 ? '' : 's'}</h2>
+      <div className="flex flex-wrap items-end gap-6">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Venda Defenz</p>
+          <p className="text-2xl font-semibold text-slate-700 tabular-nums">{brl(c.revenue)}</p>
+          <p className="text-xs text-slate-400">{c.dealsDefenz} venda{c.dealsDefenz === 1 ? '' : 's'}{c.dealsDefenz ? ` · ticket ${brl(Math.round(c.revenue / c.dealsDefenz))}` : ''}</p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Repasse SS</p>
+          <p className="text-2xl font-semibold text-slate-500 tabular-nums">{brl(c.revenueRepasse)}</p>
+          <p className="text-xs text-slate-400">{c.dealsRepasse} repasse{c.dealsRepasse === 1 ? '' : 's'}</p>
+        </div>
+        <div className="border-l border-slate-200 pl-6">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Total</p>
+          <p className="text-4xl font-semibold text-slate-900 tabular-nums">{brl(c.revenueTotal)}</p>
+          <p className="text-xs text-slate-400">faturamento do período</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Consolidado do intervalo (Σ receita / Σ esforço da janela de semanas) ──────
 function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
   const cor = COR[c.cor];
@@ -353,6 +379,8 @@ export const MetasDashboard = () => {
           <p className="text-xs text-slate-400">
             Aqui a meta conta só a <span className="font-medium text-slate-500">Venda Defenz</span>; o Repasse SS é informativo. O esforço (ligações, e-mails, apresentações, propostas, reuniões) conta de <span className="font-medium text-slate-500">segunda a sexta</span>; a receita segue atribuída à semana inteira (Seg–Dom).
           </p>
+
+          {response?.consolidado && <FaturamentoCompletoCard c={response.consolidado} />}
 
           {response && <FarolMetas res={response} />}
 
