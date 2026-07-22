@@ -356,18 +356,18 @@ export const ResumoDiarioDashboard = () => {
 
           {/* Base instalada top contas — clicável, abre o drawer com a lista completa */}
           {baseShow && baseShow.top_contas.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setBaseDrawerOpen(true)}
-              className="w-full rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5 text-left transition-colors hover:border-red-200/60 hover:bg-white/90 cursor-pointer"
-            >
+            <div className="w-full rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">
                   Base Instalada · Top Contas {baseIsCurrent && <span className="text-slate-400 normal-case font-medium">(atual)</span>}
                 </h2>
-                <span className="text-xs font-semibold text-slate-400 hover:text-red-600 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBaseDrawerOpen(true)}
+                  className="text-xs font-semibold text-slate-400 hover:text-red-600 shrink-0 transition-colors cursor-pointer"
+                >
                   ver todas as {nf(baseShow.clientes_ativos)} →
-                </span>
+                </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1.5">
                 {baseShow.top_contas.slice(0, 8).map((c, i) => (
@@ -382,7 +382,7 @@ export const ResumoDiarioDashboard = () => {
                   (Demais {baseShow.demais_count} contas somam {nf(baseShow.demais_licencas)} licenças)
                 </p>
               )}
-            </button>
+            </div>
           )}
 
           {/* LGPD footer */}
