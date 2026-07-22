@@ -75,6 +75,20 @@ export interface RawDeal {
   tags?: string;            // nomes das tags do deal no Zoho, unidas por ", " (feature-metas-fonte-receita)
 }
 
+// --- Base instalada (drill-down por empresa, feature-base-instalada-drilldown) ---
+
+export interface BaseInstaladaCliente {
+  empresa: string;
+  licencas: number;
+  negocios: number;
+}
+
+export interface BaseInstalada {
+  clientes: BaseInstaladaCliente[];
+  totalClientes: number;
+  totalLicencas: number;
+}
+
 export interface RawReuniao {
   data?: string;    // YYYY-MM-DD
   assunto?: string;
