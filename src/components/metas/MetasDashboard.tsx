@@ -21,9 +21,11 @@ const nf = (n: number) => n.toLocaleString('pt-BR');
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const fmt = (s: string) => { try { return format(new Date(`${s}T12:00:00`), 'dd/MM', { locale: ptBR }); } catch { return s; } };
 
+// Tons de texto AA (WCAG) — os tons 600 reprovam contraste em fontes pequenas (11-12px);
+// dots/barras seguem 500 normalmente (área maior, não precisa do mesmo contraste de texto).
 const COR: Record<FarolCor, { dot: string; bar: string; text: string; ring: string; bg: string }> = {
-  verde: { dot: 'bg-emerald-500', bar: 'bg-emerald-500', text: 'text-emerald-600', ring: 'ring-emerald-500/20', bg: 'bg-emerald-50' },
-  amarelo: { dot: 'bg-amber-500', bar: 'bg-amber-500', text: 'text-amber-600', ring: 'ring-amber-500/20', bg: 'bg-amber-50' },
+  verde: { dot: 'bg-emerald-500', bar: 'bg-emerald-500', text: 'text-emerald-700', ring: 'ring-emerald-500/20', bg: 'bg-emerald-50' },
+  amarelo: { dot: 'bg-amber-500', bar: 'bg-amber-500', text: 'text-amber-700', ring: 'ring-amber-500/20', bg: 'bg-amber-50' },
   vermelho: { dot: 'bg-red-500', bar: 'bg-red-500', text: 'text-red-600', ring: 'ring-red-500/20', bg: 'bg-red-50' },
 };
 
@@ -46,7 +48,8 @@ function DeltaBadge({ v, label }: { v: number | null; label?: string }) {
   const flat = v === 0;
   const up = v > 0;
   const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
-  const cls = flat ? 'text-slate-400' : up ? 'text-emerald-600' : 'text-red-500';
+  // Queda de esforço = atenção, não incêndio — âmbar, nunca vermelho (§Padrões).
+  const cls = flat ? 'text-slate-400' : up ? 'text-emerald-700' : 'text-amber-700';
   const txt = `${up && !flat ? '+' : ''}${Math.round(v * 100)}%`;
   return (
     <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${cls}`}>
@@ -90,7 +93,7 @@ function FarolBucketCard({ icon: Icon, title, b, repasse }: { icon: typeof Targe
       </div>
       <div className="relative h-0">
         {expectedPct > 0 && expectedPct < 100 && (
-          <div className="absolute -top-2 h-2 w-0.5 bg-slate-400" style={{ left: `${expectedPct}%` }} title={`Esperado pelo ritmo: ${brl(b.expected)}`} />
+          <div className="absolute -top-2 h-2 w-[2px] bg-slate-600" style={{ left: `${expectedPct}%` }} title={`Esperado pelo ritmo: ${brl(b.expected)}`} />
         )}
       </div>
       <div className="mt-2 flex items-center justify-between text-xs">
@@ -161,15 +164,7 @@ function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
         </span>
       </div>
 
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl lg:text-4xl font-semibold tracking-tight text-slate-900 font-display tabular-nums">{brl(c.revenue)}</span>
-        <span className="text-sm text-slate-400 tabular-nums">/ {brl(c.goal)} meta ({c.nWeeks} × R$6k)</span>
-      </div>
-      {c.revenueRepasse > 0 && (
-        <p className="mt-1 text-xs text-slate-400">+ <span className="font-medium text-slate-500 tabular-nums">{brl(c.revenueRepasse)}</span> repasse SS (fora da meta)</p>
-      )}
-
-      <div className="relative mt-3 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+      <div className="relative mt-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${fill}%` }}
