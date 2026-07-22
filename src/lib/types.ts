@@ -524,6 +524,17 @@ export interface ReceitaPorCanalMetrics {
   total_deals: number;
 }
 
+// Metas por canal (feature-metas-canal / Spec 2) — meta mensal fixa por canal,
+// persistida no Neon (tabela channel_targets), escalada ao período no front.
+export type CanalCategoria = 'direto' | 'parceiro' | 'securisoft';
+export interface ChannelTarget {
+  categoria: CanalCategoria;
+  valor_mensal: number;
+  updated_at?: string;
+  updated_by?: string | null;
+}
+export type ChannelTargets = Record<CanalCategoria, number>; // valor_mensal por canal
+
 // Excel Export types (V3.9)
 export interface EnrichedLead {
   // Dados do lead (leads_completo)
