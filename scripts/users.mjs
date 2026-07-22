@@ -34,8 +34,8 @@ function hashPassword(pw) {
   return `scrypt$${N}$${r}$${p}$${salt.toString("hex")}$${hash.toString("hex")}`;
 }
 
-async function migrate() {
-  const ddl = readFileSync(new URL("../db/migrations/0001_auth.sql", import.meta.url), "utf8");
+async function applyMigration(filename) {
+  const ddl = readFileSync(new URL(`../db/migrations/${filename}`, import.meta.url), "utf8");
   const stmts = ddl
     .split("\n")
     .filter((l) => !l.trim().startsWith("--"))
@@ -44,7 +44,13 @@ async function migrate() {
     .map((s) => s.trim())
     .filter(Boolean);
   for (const s of stmts) await sql.query(s);
-  console.log(`migrate ok (${stmts.length} statements aplicados).`);
+  return stmts.length;
+}
+
+async function migrate() {
+  const n1 = await applyMigration("0001_auth.sql");
+  const n2 = await applyMigration("0002_channel_targets.sql");
+  console.log(`migrate ok (${n1 + n2} statements aplicados).`);
 }
 
 async function add([email, name, password, role = "member"]) {
