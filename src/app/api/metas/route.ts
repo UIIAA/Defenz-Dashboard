@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const now = new Date();
-    const { semanas, consolidado } = computeMetas(deals, resumoRowsRaw ?? [], now, 8, range);
+    const { semanas, consolidado, eficiencia } = computeMetas(deals, resumoRowsRaw ?? [], now, 8, range);
 
     // Farol ao vivo (semana/mês). No /metas a meta conta SÓ Venda Defenz — então o
     // Farol também é defenz-only (particionado por fonteVenda), diferente do antigo
@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       periodo: isRange ? { from: range!.from, to: range!.to, nWeeks: consolidado.nWeeks } : null,
       farol,
       farolRepasse,
+      eficiencia,
       generatedAt: now.toISOString(),
     };
 

@@ -799,10 +799,7 @@ export interface MetasResponse {
   periodo: MetasPeriodo | null;   // preenchido quando um intervalo foi selecionado
   farol: Farol | null;            // Farol ao vivo (semana/mês), receita = Venda Defenz
   farolRepasse: Farol | null;     // idem, mas receita = Repasse SS (informativo)
-  // Opcional aqui (embora computeMetas já retorne sempre): a Tarefa 10 do plano
-  // (fora do escopo deste lote T1-T4) é quem faz o /api/metas/route.ts incluir este
-  // campo na resposta. Marcar como obrigatório quebraria o build do route.ts hoje.
-  eficiencia?: MetasEficiencia;   // índices Esforço→Vendas + delta vs janela anterior
+  eficiencia: MetasEficiencia;    // índices Esforço→Vendas + delta vs janela anterior
   generatedAt: string;            // ISO do instante de cálculo
   _cached?: boolean;
   _cacheAge?: number;
