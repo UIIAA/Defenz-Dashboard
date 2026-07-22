@@ -302,6 +302,7 @@ export const MetasDashboard = () => {
               today={today}
               onChange={setSel}
               disabled={loading}
+              numberOfMonths={2}
               hint="Escolha 1 semana (1 clique) ou um intervalo de semanas (2 cliques)"
               trigger={
                 <button className="px-3 py-1 flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-red-600 transition-colors">

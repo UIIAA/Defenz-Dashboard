@@ -30,6 +30,8 @@ interface DateRangePickerProps {
   align?: 'start' | 'center' | 'end';
   hint?: string;
   disabled?: boolean;
+  /** Nº de meses exibidos lado a lado no calendário (default 1). /metas usa 2 p/ intervalos cruzando mês. */
+  numberOfMonths?: number;
 }
 
 // Núcleo reusável: popover + calendário mode=range + lógica de 1/2 cliques + Aplicar/Cancelar.
@@ -43,6 +45,7 @@ export function DateRangePicker({
   align = 'center',
   hint = 'Clique 1 dia (= diário) ou 2 dias (= intervalo)',
   disabled,
+  numberOfMonths = 1,
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<string | null>(null);
@@ -81,6 +84,7 @@ export function DateRangePicker({
           onSelect={() => {}}
           onDayClick={handleDayClick}
           defaultMonth={toDate(refDay)}
+          numberOfMonths={numberOfMonths}
           disabled={{ before: toDate(floor), after: toDate(today) }}
           locale={ptBR}
         />
