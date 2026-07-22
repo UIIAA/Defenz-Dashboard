@@ -10,9 +10,9 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import type { WeekMetric, MetasResponse, MetasConsolidado, FarolBucket, FarolCor } from '@/lib/types';
+import type { WeekMetric, MetasResponse, MetasConsolidado, FarolBucket, FarolCor, MetasEficiencia } from '@/lib/types';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
-import type { RangeSelection } from '@/lib/date-range';
+import { presetRange, type RangeSelection, type PresetKey } from '@/lib/date-range';
 import { todayBRT, addDays } from '@/lib/resumo-diario';
 
 const brl = (n: number) =>
@@ -317,6 +317,128 @@ function RepasseChart({ data }: { data: ChartRow[] }) {
   );
 }
 
+// Delta de eficiência: guarda de amostra (< 3) suprime a variação — "— amostra pequena",
+// nunca vermelho (queda de índice = atenção, não incêndio).
+function EficienciaDeltaTag({ v }: { v: number | null }) {
+  if (v === null) {
+    return <span className="text-[11px] text-slate-400">— amostra pequena</span>;
+  }
+  const flat = v === 0;
+  const up = v > 0;
+  const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
+  const cls = flat ? 'text-slate-400' : up ? 'text-emerald-700' : 'text-amber-700';
+  const txt = `${up && !flat ? '+' : ''}${Math.round(v * 100)}%`;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${cls}`}>
+      <Icon size={12} strokeWidth={2.5} />
+      {txt}
+    </span>
+  );
+}
+
+// 4 tiles de eficiência Esforço→Vendas (spec §5b). null → "—"; fração crua na sub-linha.
+function EficienciaGrid({ eficiencia, c }: { eficiencia: MetasEficiencia; c: MetasConsolidado }) {
+  const { atual, delta, labelComparacao } = eficiencia;
+  const items: { label: string; value: string; delta: number | null; fracao: string }[] = [
+    {
+      label: 'Ticket médio',
+      value: atual.ticketMedio === null ? '—' : brl(atual.ticketMedio),
+      delta: delta.ticketMedio,
+      fracao: `${brl(c.revenue)} ÷ ${c.dealsDefenz} venda${c.dealsDefenz === 1 ? '' : 's'}`,
+    },
+    {
+      label: 'R$ / proposta',
+      value: atual.rsPorProposta === null ? '—' : brl(atual.rsPorProposta),
+      delta: delta.rsPorProposta,
+      fracao: `${brl(c.revenue)} ÷ ${nf(c.esforco.propostas)} proposta${c.esforco.propostas === 1 ? '' : 's'}`,
+    },
+    {
+      label: 'Propostas / 100 ligações',
+      value: atual.propostasPor100Ligacoes === null ? '—' : atual.propostasPor100Ligacoes.toLocaleString('pt-BR', { maximumFractionDigits: 1 }),
+      delta: delta.propostasPor100Ligacoes,
+      fracao: `${nf(c.esforco.propostas)} propostas ÷ ${nf(c.esforco.ligacoes)} ligações`,
+    },
+    {
+      label: 'Reunião → proposta',
+      value: atual.reuniaoParaProposta === null ? '—' : pct(atual.reuniaoParaProposta),
+      delta: delta.reuniaoParaProposta,
+      fracao: `${nf(c.esforco.propostas)} propostas ÷ ${nf(c.esforco.reunioes)} reuniões`,
+    },
+  ];
+  return (
+    <div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {items.map(it => (
+          <div key={it.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{it.label}</p>
+            <p className="text-xl font-semibold text-slate-900 tabular-nums mt-1">{it.value}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{it.fracao}</p>
+            <div className="mt-1"><EficienciaDeltaTag v={it.delta} /></div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-slate-400">{labelComparacao}</p>
+    </div>
+  );
+}
+
+// Gráfico C — Esforço → Vendas: linha do tempo dual-axis (barras = receita, linha = esforço)
+// + índices de eficiência do período selecionado. Eixos rotulados e coloridos (R$ / ações).
+function EsforcoVendasCard({ data, eficiencia, c }: { data: ChartRow[]; eficiencia: MetasEficiencia; c: MetasConsolidado }) {
+  return (
+    <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-1">Esforço → Vendas</h2>
+      <p className="text-[11px] text-slate-400 mb-3">barras = receita · linha = esforço (qtde de ações)</p>
+      <ResponsiveContainer width="100%" height={260}>
+        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+          <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+          <YAxis
+            yAxisId="rev"
+            tick={{ fill: '#64748b', fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={tickK}
+            label={{ value: 'R$', position: 'insideTopLeft', fill: '#64748b', fontSize: 11 }}
+          />
+          <YAxis
+            yAxisId="esf"
+            orientation="right"
+            tick={{ fill: '#0284c7', fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            label={{ value: 'ações', position: 'insideTopRight', fill: '#0284c7', fontSize: 11 }}
+          />
+          <ReTooltip content={ReceitaTooltip} />
+          <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Receita" fill="#64748b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+          <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço (ações)" stroke="#0284c7" strokeWidth={2} dot={{ r: 3, fill: '#fff', stroke: '#0284c7', strokeWidth: 2 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <p className="mt-2 text-[11px] text-slate-400 italic">Esforço vende com atraso — compare tendências, não a mesma semana.</p>
+
+      <div className="mt-5 pt-5 border-t border-slate-100">
+        <EficienciaGrid eficiencia={eficiencia} c={c} />
+      </div>
+    </div>
+  );
+}
+
+// Presets do seletor de período (spec §6) — segmented control em linha própria.
+const PRESETS: { key: PresetKey; label: string }[] = [
+  { key: '8sem', label: '8 sem' },
+  { key: '12sem', label: '12 sem' },
+  { key: 'este-mes', label: 'Este mês' },
+  { key: 'mes-passado', label: 'Mês passado' },
+  { key: 'trimestre', label: 'Trimestre' },
+];
+
+function isActivePreset(sel: RangeSelection | null, key: PresetKey, today: string): boolean {
+  if (!sel || sel.kind !== 'periodo') return false;
+  const p = presetRange(key, today);
+  return p.kind === 'periodo' && p.from === sel.from && p.to === sel.to;
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────────
 export const MetasDashboard = () => {
   const today = useMemo(() => todayBRT(), []);
@@ -360,12 +482,43 @@ export const MetasDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between border-b border-slate-200 pb-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 font-display">Farol de Metas</h1>
-          <p className="text-red-600 text-sm font-bold tracking-wide mt-1">META SEMANAL R$ 6.000 · POR QUE BATI / NÃO BATI</p>
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 font-display">Farol de Metas</h1>
+            <p className="text-sm text-slate-500 mt-1">Meta semanal: <span className="font-semibold text-slate-700">R$ 6.000</span> · só Venda Defenz — Repasse SS é informativo</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {response?._cached && <span className="text-xs text-amber-500">cache</span>}
+            <button
+              onClick={() => fetchData(query)}
+              disabled={loading}
+              title="Atualizar"
+              className="p-2 rounded-full bg-white/80 border border-slate-200/60 text-slate-500 hover:text-red-600 hover:border-red-200 shadow-sm transition-colors disabled:opacity-50"
+            >
+              <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-wrap items-center gap-1 bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-full p-1 shadow-sm">
+            {PRESETS.map(p => {
+              const active = isActivePreset(sel, p.key, today);
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => setSel(presetRange(p.key, today))}
+                  disabled={loading}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:opacity-50 ${
+                    active ? 'bg-red-600 text-white' : 'text-slate-600 hover:text-red-600'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
           <div className="flex items-center bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-full p-1 shadow-sm">
             <DateRangePicker
               value={sel ?? { kind: 'dia', data: today }}
@@ -388,15 +541,6 @@ export const MetasDashboard = () => {
               </button>
             )}
           </div>
-          {response?._cached && <span className="text-xs text-amber-500">cache</span>}
-          <button
-            onClick={() => fetchData(query)}
-            disabled={loading}
-            title="Atualizar"
-            className="p-2 rounded-full bg-white/80 border border-slate-200/60 text-slate-500 hover:text-red-600 hover:border-red-200 shadow-sm transition-colors disabled:opacity-50"
-          >
-            <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
         </div>
       </div>
 
@@ -438,6 +582,10 @@ export const MetasDashboard = () => {
               <ReceitaMetaChart data={chartData} isInterval={isInterval} />
               <RepasseChart data={chartData} />
             </>
+          )}
+
+          {response?.eficiencia && response?.consolidado && (
+            <EsforcoVendasCard data={chartData} eficiencia={response.eficiencia} c={response.consolidado} />
           )}
         </motion.div>
       )}
