@@ -6,7 +6,10 @@
 // Ver docs/features/feature-farol-metas.md — seção "Fase 2 — Landed" — e
 // docs/features/feature-metas-fonte-receita.md (separação Venda Defenz × Repasse SS).
 
-import type { RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta, MetasConsolidado } from './types';
+import type {
+  RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta, MetasConsolidado,
+  EficienciaIndices, EficienciaDelta, MetasEficiencia,
+} from './types';
 import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade, isoDow } from './farol';
 import { isClosedWon, dateInRange, classifyOrigin } from './metrics';
 import { dedupeByData, parseResumoRow } from './resumo-diario';
@@ -207,6 +210,33 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
   };
 }
 
+interface EficInput { receita: number; deals: number; esforco: WeekEsforco }
+const ratio = (num: number, den: number): number | null => (den > 0 ? num / den : null);
+
+// Índices Esforço→Vendas (feature-metas-v2 §5b) + delta vs uma janela de comparação
+// (tipicamente a janela anterior de mesmo tamanho). Delta é suprimido (null) quando
+// o denominador do índice for < 3 em qualquer uma das duas janelas — amostra pequena
+// não sustenta uma variação percentual confiável.
+export function computeEficiencia(cur: EficInput, prev: EficInput, labelComparacao: string): MetasEficiencia {
+  const idx = (i: EficInput): EficienciaIndices => ({
+    ticketMedio: ratio(i.receita, i.deals),
+    rsPorProposta: ratio(i.receita, i.esforco.propostas),
+    propostasPor100Ligacoes: i.esforco.ligacoes > 0 ? (i.esforco.propostas / i.esforco.ligacoes) * 100 : null,
+    reuniaoParaProposta: ratio(i.esforco.propostas, i.esforco.reunioes),
+  });
+  const atual = idx(cur), ant = idx(prev);
+  // delta só quando ambos definidos E amostra (denominador do índice) >= 3 nas duas janelas
+  const guarded = (a: number | null, b: number | null, denCur: number, denPrev: number): number | null =>
+    a === null || b === null || b === 0 || denCur < 3 || denPrev < 3 ? null : (a - b) / b;
+  const delta: EficienciaDelta = {
+    ticketMedio: guarded(atual.ticketMedio, ant.ticketMedio, cur.deals, prev.deals),
+    rsPorProposta: guarded(atual.rsPorProposta, ant.rsPorProposta, cur.esforco.propostas, prev.esforco.propostas),
+    propostasPor100Ligacoes: guarded(atual.propostasPor100Ligacoes, ant.propostasPor100Ligacoes, cur.esforco.ligacoes, prev.esforco.ligacoes),
+    reuniaoParaProposta: guarded(atual.reuniaoParaProposta, ant.reuniaoParaProposta, cur.esforco.reunioes, prev.esforco.reunioes),
+  };
+  return { atual, delta, labelComparacao };
+}
+
 // `now` define a semana atual (BRT). Sem `range`, geram-se as `nWeeks` semanas ISO
 // (Seg–Dom) pra trás a partir dela; com `range`, as semanas cujas segundas caem no
 // intervalo. Sempre mais recente primeiro. A semana mais antiga da janela não tem
@@ -217,7 +247,7 @@ export function computeMetas(
   now: Date,
   nWeeks = 8,
   range?: { from: string; to: string }
-): { semanas: WeekMetric[]; consolidado: MetasConsolidado } {
+): { semanas: WeekMetric[]; consolidado: MetasConsolidado; eficiencia: MetasEficiencia } {
   const p = brtParts(now);
   const currentWeekStart = mondayOf(p.date);
   const elapsedCurrent = weekElapsed(p);
@@ -267,5 +297,37 @@ export function computeMetas(
     };
   });
 
-  return { semanas, consolidado: buildConsolidado(raw) };
+  const consolidado = buildConsolidado(raw);
+
+  // Janela anterior de mesmo tamanho: as `windowSize` semanas imediatamente antes
+  // da mais antiga da janela atual (contíguas, sem sobreposição). Alimenta os
+  // índices de eficiência (Esforço→Vendas) com um delta vs "antes".
+  const windowSize = raw.length;
+  const oldestWeekStart = raw[raw.length - 1].weekStart;
+  const prevWeekStarts = Array.from({ length: windowSize }, (_, i) => addDays(oldestWeekStart, -7 * (i + 1)));
+  let prevReceita = 0;
+  let prevDeals = 0;
+  const prevEsforco = prevWeekStarts.reduce<WeekEsforco>((acc, weekStart) => {
+    const weekEnd = addDays(weekStart, 6);
+    const rev = weekRevenue(deals, weekStart, weekEnd);
+    prevReceita += rev.defenz;
+    prevDeals += rev.defenzCount;
+    const esf = weeklyEsforco(resumoRows, weekStart, weekEnd);
+    return {
+      ligacoes: acc.ligacoes + esf.ligacoes,
+      emails: acc.emails + esf.emails,
+      apresentacoes: acc.apresentacoes + esf.apresentacoes,
+      propostas: acc.propostas + esf.propostas,
+      reunioes: acc.reunioes + esf.reunioes,
+    };
+  }, zeroEsforco());
+
+  const labelComparacao = `vs ${windowSize} semana${windowSize === 1 ? '' : 's'} anteriores`;
+  const eficiencia = computeEficiencia(
+    { receita: consolidado.revenue, deals: consolidado.dealsDefenz, esforco: consolidado.esforco },
+    { receita: prevReceita, deals: prevDeals, esforco: prevEsforco },
+    labelComparacao
+  );
+
+  return { semanas, consolidado, eficiencia };
 }

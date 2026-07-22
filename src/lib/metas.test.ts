@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeMetas, weekRevenue, weeklyEsforco, fonteVenda } from './metas';
+import { computeMetas, weekRevenue, weeklyEsforco, fonteVenda, computeEficiencia } from './metas';
 import type { RawDeal, RawResumoDiario } from './types';
 
 // America/Sao_Paulo é UTC-3 o ano todo (sem DST desde 2019). Mesmos instantes-âncora
@@ -351,6 +351,23 @@ describe('computeMetas — consolidado (somatório das semanas da janela)', () =
     expect(consolidado.revenue).toBe(4000);
     expect(consolidado.revenueRepasse).toBe(2000);
     expect(consolidado.revenueTotal).toBe(6000);
+  });
+});
+
+describe('computeEficiencia', () => {
+  const esf = { ligacoes: 400, emails: 0, apresentacoes: 0, propostas: 20, reunioes: 60 };
+  it('calcula índices e null quando denominador zero', () => {
+    const r = computeEficiencia({ receita: 40000, deals: 4, esforco: esf },
+                                { receita: 30000, deals: 5, esforco: { ...esf, propostas: 25 } }, 'vs 8 semanas anteriores');
+    expect(r.atual.ticketMedio).toBe(10000);
+    expect(r.atual.rsPorProposta).toBe(2000);
+    expect(r.atual.propostasPor100Ligacoes).toBe(5);
+    expect(r.atual.reuniaoParaProposta).toBeCloseTo(20 / 60);
+  });
+  it('suprime delta quando amostra < 3', () => {
+    const r = computeEficiencia({ receita: 10000, deals: 1, esforco: esf },
+                                { receita: 9000, deals: 2, esforco: esf }, 'vs junho');
+    expect(r.delta.ticketMedio).toBeNull(); // deals 1 e 2 < 3
   });
 });
 

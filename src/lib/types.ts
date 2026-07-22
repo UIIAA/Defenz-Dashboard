@@ -770,12 +770,39 @@ export interface MetasPeriodo {
   nWeeks: number; // nº de semanas resolvidas no intervalo
 }
 
+// Índices de eficiência Esforço→Vendas (feature-metas-v2 §5b). Denominador 0 → null.
+export interface EficienciaIndices {
+  ticketMedio: number | null;
+  rsPorProposta: number | null;
+  propostasPor100Ligacoes: number | null;
+  reuniaoParaProposta: number | null; // 0..1
+}
+
+// Variação da janela atual vs a janela anterior de mesmo tamanho. null quando a
+// amostra (denominador do índice) for < 3 em qualquer uma das duas janelas.
+export interface EficienciaDelta {
+  ticketMedio: number | null;
+  rsPorProposta: number | null;
+  propostasPor100Ligacoes: number | null;
+  reuniaoParaProposta: number | null;
+}
+
+export interface MetasEficiencia {
+  atual: EficienciaIndices;
+  delta: EficienciaDelta;      // null por índice quando amostra < 3
+  labelComparacao: string;     // ex.: "vs 8 semanas anteriores" | "vs junho"
+}
+
 export interface MetasResponse {
   semanas: WeekMetric[];          // mais recente primeiro
   consolidado: MetasConsolidado;  // somatório da janela retornada
   periodo: MetasPeriodo | null;   // preenchido quando um intervalo foi selecionado
   farol: Farol | null;            // Farol ao vivo (semana/mês), receita = Venda Defenz
   farolRepasse: Farol | null;     // idem, mas receita = Repasse SS (informativo)
+  // Opcional aqui (embora computeMetas já retorne sempre): a Tarefa 10 do plano
+  // (fora do escopo deste lote T1-T4) é quem faz o /api/metas/route.ts incluir este
+  // campo na resposta. Marcar como obrigatório quebraria o build do route.ts hoje.
+  eficiencia?: MetasEficiencia;   // índices Esforço→Vendas + delta vs janela anterior
   generatedAt: string;            // ISO do instante de cálculo
   _cached?: boolean;
   _cacheAge?: number;
