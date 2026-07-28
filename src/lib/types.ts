@@ -63,12 +63,16 @@ export interface RawDeal {
   modified_time?: string;
   closing_date?: string;
   resultados?: string;
-  // FOOTGUN (feature-016 eval): the public `deals` tab does NOT currently export
-  // these four columns. They compile but read as undefined → metrics that use them
-  // (computeComissaoOwnerCanal, computeRenovacoesVencidas, total_licencas_ativas)
-  // silently produce empty/0. Only populated if a future Fase 2 adds them to the
-  // N8N "Format Deals Raw" export. Do NOT source per-owner data from the deals tab.
+  // `licencas` PASSOU A SER EXPORTADO em 2026-07-28 (feature-base-instalada-drilldown):
+  // o nó `Zoho Deals` do workflow N8N QjnzGicZHIPBNN1g agora busca o campo Zoho
+  // `N_de_Endpoints`, o `Format Deals Raw` emite `licencas` e o `Sheets Deals` grava
+  // na coluna N da aba. O mesmo nó ganhou paginação (até 10 páginas) — antes trazia só
+  // os 200 deals mais recentes, o que deixava a base instalada incompleta.
   licencas?: number | string;
+  // FOOTGUN (feature-016 eval): estas TRÊS colunas abaixo continuam NÃO exportadas pela
+  // aba `deals`. Compilam mas leem undefined → métricas que dependem delas
+  // (computeComissaoOwnerCanal, computeRenovacoesVencidas) silenciosamente dão vazio/0.
+  // NÃO tire dado por-owner da aba deals.
   data_renovacao?: string;  // YYYY-MM-DD — data de renovação do contrato (SS deals)
   recurring?: string;       // 'true'|'sim'|'1' quando o contrato é recorrente (MRR/ARR)
   owner?: string;           // responsável pelo deal no Zoho CRM (Deal Owner)

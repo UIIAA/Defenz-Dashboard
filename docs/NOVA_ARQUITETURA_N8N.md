@@ -348,3 +348,61 @@ Reunioes sem `<>` (internas, pessoais, etc.) sao ignoradas automaticamente.
 - [Zoho CRM API Directory](https://www.zoho.com/crm/developer/docs/api-directory.html)
 - [Zoho CRM Field Meta Data API](https://www.zoho.com/crm/developer/docs/api/v8/field-meta.html)
 - [Zoho CRM v8 API Docs](https://www.zoho.com/crm/developer/docs/api/v8/)
+
+---
+
+## 7. Mudancas aplicadas em 2026-07-28 (operacao ao vivo)
+
+Aplicadas via MCP no workflow `QjnzGicZHIPBNN1g` (Coleta Metricas v2). Registradas aqui
+porque sao config de servidor — nao vivem no git.
+
+### 7.1 Resiliencia da coleta (o bug que fazia perder o dia)
+
+**Sintoma:** 3 execucoes falhas (22/07 18h, 23/07 6h e 18h). **Causa-raiz:** o no
+`IA Classificar` (Gemini Flash) recebia `503 Service Unavailable` transitorio da API do
+Google e, por nao ter retry, **derrubava a execucao inteira**. Como as branches de
+Callbox / Ligacoes / Deals sao irmas na mesma execucao, elas **nunca rodavam** — ou seja,
+uma instabilidade de segundos do Gemini custava a gravacao daquele turno.
+
+**Correcao:**
+- `IA Classificar`: `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 5000`,
+  `onError: continueRegularOutput`.
+- `Salvar Classificacoes`: guard `if (d._empty || d.error) return null;`.
+
+> O guard e **obrigatorio** junto com o `continue`. `Sheets Classificacoes` grava com
+> `appendOrUpdate` casando por `lead_id`; sem o guard, uma falha do Gemini escreveria
+> linhas `erro_parse` **por cima de classificacoes boas**. Ligar so o "continue" seria
+> uma correcao destrutiva.
+
+### 7.2 Licencas na aba `deals` (feature-base-instalada-drilldown)
+
+O campo de licencas no Zoho e **`N_de_Endpoints`** (descoberto no no `Parse Zoho Base` do
+workflow `aMhvdTP5aAi0Z1sf`, que ja o usava para o `base_top_contas`). Foram 3 partes —
+as tres sao necessarias, faltando uma o dado some em silencio:
+
+1. `Zoho Deals` → `N_de_Endpoints` adicionado ao query param `fields`.
+2. `Format Deals Raw` → emite `licencas: parseInt(d.N_de_Endpoints, 10) || 0`.
+3. `Sheets Deals` → `licencas` no `columns.value` **e** no `columns.schema` (o no usa
+   `defineBelow`, entao coluna nao mapeada nao e gravada), + cabecalho `licencas` criado
+   na coluna N da aba.
+
+### 7.3 Paginacao do `Zoho Deals` (base instalada estava incompleta)
+
+O no `Zoho Deals` do Coleta v2 tinha `options: {}` — **sem paginacao** — com
+`per_page=200` e `sort_by=Created_Time desc`. Resultado: so os **200 deals mais recentes**
+eram atualizados; deals antigos ficavam com linha velha e sem licenca. A soma de licencas
+dos ganhos dava ~3.3k contra os ~5.9k reais do snapshot.
+
+**Correcao:** mesma paginacao ja comprovada no workflow `aMhvdTP5aAi0Z1sf`
+(`page = $pageCount + 1`, completa quando `!$response.body.info.more_records`,
+`maxRequests: 10`).
+
+### 7.4 Fatos que confundem (leia antes de "consertar")
+
+- Sao **dois** workflows: `QjnzGicZHIPBNN1g` (Coleta, cron 6h/18h, **todo dia**) e
+  `aMhvdTP5aAi0Z1sf` (**Snapshot Diario**, cron 17h50 BRT, **seg-sex**) — o Snapshot e
+  quem escreve a aba `resumo_diario`. **Ausencia de execucao no sabado/domingo e normal.**
+- No Coleta v2, os nos `Consolidar`, `Split/Sheets Metricas | Deals Ativos |
+  Clientes Fechados | Atividades | Esforco Diario` estao **desabilitados de proposito** —
+  o dashboard calcula isso em `src/lib/metrics.ts` a partir das abas raw. **Nao reabilitar.**
+- Base instalada no snapshot = `Stage === 'Fechado Ganho' || 'Contrato Enviado'`.
