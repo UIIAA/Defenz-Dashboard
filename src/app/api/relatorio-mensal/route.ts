@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
-import { fetchFromSheets, fetchFromSheetsNullable } from "@/lib/sheets";
+import { fetchFromSheets, fetchTabStrict } from "@/lib/sheets";
 import {
   computeMetrics,
   getLastClosedClient,
@@ -133,7 +133,11 @@ export async function GET(request: NextRequest) {
       fetchFromSheets("ligacoes") as Promise<RawCall[]>,
       fetchFromSheets("emails") as Promise<RawEmail[]>,
       fetchFromSheets("classificacao_ia") as Promise<RawClassificacao[]>,
-      fetchFromSheetsNullable("reunioes") as Promise<RawReuniao[] | null>,
+      // 'assunto' é exclusivo do schema de reunioes. Sem o strict, a aba (que ainda
+      // NÃO existe) caía no fallback silencioso do gviz para a sheet 0 = `ligacoes`,
+      // e as ~11,5k ligações entravam em computeMetrics/bucketizeByWeek COMO REUNIÕES.
+      // Mesmo tratamento já usado em /api/dashboard-sheets → null cai no proxy [REUNIAO].
+      fetchTabStrict("reunioes", ["data", "assunto"]) as Promise<RawReuniao[] | null>,
       fetchFromSheets("leads") as Promise<RawLead[]>,
     ]);
 
