@@ -47,10 +47,19 @@ async function applyMigration(filename) {
   return stmts.length;
 }
 
+const MIGRATIONS = [
+  "0001_auth.sql",
+  "0002_channel_targets.sql",
+  "0003_dados_negocio.sql",
+];
+
 async function migrate() {
-  const n1 = await applyMigration("0001_auth.sql");
-  const n2 = await applyMigration("0002_channel_targets.sql");
-  console.log(`migrate ok (${n1 + n2} statements aplicados).`);
+  let total = 0;
+  for (const m of MIGRATIONS) {
+    total += await applyMigration(m);
+    console.log(`  ✓ ${m}`);
+  }
+  console.log(`migrate ok (${total} statements aplicados).`);
 }
 
 async function add([email, name, password, role = "member"]) {

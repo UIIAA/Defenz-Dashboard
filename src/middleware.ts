@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/_next", "/favicon.ico"];
+// `/api/ingest` (e `/api/ingest/paridade`) NÃO passam pelo guard de sessão porque são
+// máquina-a-máquina: quem chama é o n8n, que não tem cookie. A autenticação delas é o
+// header X-Ingest-Token, comparado em tempo constante dentro da própria rota
+// (feature-migracao-neon §Segurança). Sem token válido, a rota devolve 401 sozinha.
+const PUBLIC_PATHS = ["/login", "/_next", "/favicon.ico", "/api/ingest"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -9,13 +9,30 @@ export const SPREADSHEET_ID = "1roirh1RRFg8Pfg7iFO9-rp9xtMgPCbQBuMpsOQGZoZQ";
 // keep datetime cells as raw "Date(...)" strings, which downstream DATE_RE
 // checks then dropped (root cause flavor of P9). Matching the leading 3 groups
 // without requiring the closing paren handles both.
+// 1899-12-30 é a época do Sheets: uma coluna `timeofday` chega como
+// Date(1899,11,30,H,M,S). Truncar isso pra "1899-12-30" destrói a hora EM SILÊNCIO —
+// foi o que rejeitou 11.529 ligações e 3.786 e-mails no backfill de 28/07.
+const EPOCA_HORA = /^Date\(1899,11,30,(\d+),(\d+),(\d+)\)/;
+
 function gvizDateToISO(value: string): string {
+  const hora = value.match(EPOCA_HORA);
+  if (hora) {
+    const p = (s: string) => s.padStart(2, '0');
+    return `${p(hora[1])}:${p(hora[2])}:${p(hora[3])}`;
+  }
+
   const match = value.match(/^Date\((\d+),(\d+),(\d+)/);
   if (!match) return value;
   const year = match[1];
   const month = String(Number(match[2]) + 1).padStart(2, '0');
   const day = match[3].padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/** Converte UMA célula gviz no valor final. Exportado pra teste. */
+export function gvizCellToValue(value: unknown): unknown {
+  if (typeof value === 'string' && value.startsWith('Date(')) return gvizDateToISO(value);
+  return value;
 }
 
 interface GvizParsed {
@@ -50,11 +67,7 @@ function parseGviz(text: string): GvizParsed | null {
     row.c?.forEach((cell: any, i: number) => {
       const header = headers[i];
       if (header) {
-        let value = cell?.v ?? null;
-        if (typeof value === 'string' && value.startsWith('Date(')) {
-          value = gvizDateToISO(value);
-        }
-        obj[header] = value;
+        obj[header] = gvizCellToValue(cell?.v ?? null);
       }
     });
     return obj;

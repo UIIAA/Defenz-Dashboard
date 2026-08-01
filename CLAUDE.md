@@ -196,6 +196,8 @@ The `DateFilter` component provides preset ranges and a custom calendar picker:
 | `AUTH_SECRET` | Yes | HMAC signing key (min 32 chars) for session tokens |
 | `DASHBOARD_PASSWORD` | Yes | Single shared password for dashboard access |
 | `N8N_WEBHOOK_URL` | Yes | Full URL of the N8N webhook that returns sales data |
+| `DATABASE_URL` | Yes | Neon (Postgres) — auth individual, metas por canal e ingestão |
+| `INGEST_TOKEN` | Yes (escrita dupla) | Segredo máquina-a-máquina do `POST /api/ingest`. Mínimo 32 chars. Sem ele a rota fica **fechada** (401). Gerar com `openssl rand -hex 32` |
 
 ## Security
 
@@ -247,6 +249,14 @@ The application implements several security hardening measures:
 | API Série Diária de Ligações | `src/app/api/ligacoes-serie/route.ts` |
 | API Relatório Mensal consolidado | `src/app/api/relatorio-mensal/route.ts` |
 | API Excel export | `src/app/api/export/excel/route.ts` |
+| API Ingestão Neon (POST, n8n) | `src/app/api/ingest/route.ts` |
+| API Paridade Neon × Sheets (GET) | `src/app/api/ingest/paridade/route.ts` |
+| Validação/forma da ingestão | `src/lib/ingest/schema.ts` |
+| Normalização de dimensões | `src/lib/ingest/normalize.ts` |
+| Upserts transacionais (SQL) | `src/lib/ingest/repo.ts` |
+| Comparador de paridade | `src/lib/ingest/paridade.ts` |
+| Schema de dados de negócio | `db/migrations/0003_dados_negocio.sql` |
+| Backfill histórico | `scripts/backfill-neon.mjs` |
 | Logout endpoint | `src/app/api/auth/logout/route.ts` |
 | Route group layout | `src/app/(dashboard)/layout.tsx` |
 | Executive dashboard | `src/components/dashboard/ExecutiveDashboard.tsx` |
@@ -326,6 +336,26 @@ Para aparecer no funil via Microsoft Calendar, o assunto do evento no Outlook de
 Planilha `19-01_Dashboard_Defenz` com 7+ abas (metricas, deals_ativos, clientes_fechados, atividades, classificacao_ia, agenda, ligacoes_raw, emails_raw, leads_completo). Alimentada pelo N8N (Cron 6am/18pm). Schema detalhado em `docs/NOVA_ARQUITETURA_N8N.md`.
 
 **Aba `pocs` (schema V1 — a criar):** 13 colunas — `poc_id | deal_id | deal_nome | empresa | data_inicio | data_fim_prevista | data_fim_real | status | descricao | responsavel | resultado | created_time | modified_time`. `status` ∈ `{ativa, convertida, perdida}`. `deal_id` FK para `deals.id` (opcional). Spec: `docs/features/feature-poc-schema.md`. Tipos: `RawPoc`, `Poc`, `PocStatus`, `PocMetrics`, `WeeklyBucket` em `src/lib/types.ts`.
+
+### Escrita dupla Sheets → Neon (feature-migracao-neon, Fase 1)
+
+O n8n grava **no Sheets e no Neon**. O **Sheets continua sendo a fonte da verdade**: nesta fase
+**nada é lido do Neon** e nenhum comportamento do dashboard muda. Spec: `docs/features/feature-migracao-neon.md`.
+
+- O n8n **não** fala com o Postgres direto — faz `POST /api/ingest` com `{ tabela, execucao, linhas }`
+  (as `linhas` são exatamente o que já vai pro Sheets) e o código valida/normaliza/grava.
+- Auth: header `X-Ingest-Token` (`INGEST_TOKEN`), comparado em tempo constante. A rota está na
+  allowlist do `src/middleware.ts` porque é máquina-a-máquina.
+- Máx. **500 linhas por requisição**; upsert idempotente pela chave natural; transacional por lote.
+- Linha inválida é **rejeitada e reportada** (`erros: [{linha, campo, motivo}]`), nunca coagida.
+  Chave repetida no lote → `duplicados`. Tarefa de `agenda` cujo lead não existe é gravada com
+  `lead_id` nulo e contada em `orfaos`; classificação sem lead é rejeitada (o lead é metade da
+  chave natural). Tudo reportado na resposta.
+- Portão: `GET /api/ingest/paridade` compara Neon × Sheets. **Divergência se investiga — não se
+  ajusta o comparador.** A fase fecha com 7 dias corridos de verde nas 7 tabelas.
+- Backfill do histórico: `node scripts/backfill-neon.mjs --url <base>` (leads antes de
+  classificacao_ia/agenda — essas duas têm FK pra leads).
+- Teste de integração do SQL (pula por padrão): `PGTEST_URL=... npm run test:sql`.
 
 ### N8N Workflow
 

@@ -173,6 +173,13 @@ de datas) e devolve o veredito. É o atestado de consistência **automatizado**.
 
 ## Mudanças no n8n
 
+> **Correção apurada na implementação (28/07):** são **2 workflows, não 1**. O
+> `QjnzGicZHIPBNN1g` grava 6 das 7 abas; `resumo_diario` é do workflow `aMhvdTP5aAi0Z1sf`
+> ("Snapshot Diário", cron 17h50). E são **2 nós por tabela**, não 1: o nó HTTP dispara uma
+> requisição por item, então um `Code` antes agrupa em lotes de 500 (11,5k ligações seriam 11,5k
+> requisições). Patch pronto, com o JSON exato e o mapa nó-a-nó, em
+> [`feature-migracao-neon-n8n.md`](feature-migracao-neon-n8n.md).
+
 Para cada uma das 7 tabelas, **adicionar** (nunca substituir) um nó HTTP após o nó `Sheets *`
 correspondente, apontando para `/api/ingest`.
 

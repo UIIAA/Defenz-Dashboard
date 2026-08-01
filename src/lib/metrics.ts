@@ -2,7 +2,9 @@ import type { RawDeal, RawCall, RawEmail, RawClassificacao, RawReuniao, Computed
 
 // --- Stage classification helpers ---
 
-const CLOSED_WON_STAGES = ['fechado ganho', 'contrato enviado'];
+// exportado pra que o comparador de paridade (src/lib/ingest/paridade.ts) e o SQL do
+// Neon usem EXATAMENTE a mesma definição de "ganho" que o dashboard usa.
+export const CLOSED_WON_STAGES = ['fechado ganho', 'contrato enviado'];
 const CLOSED_LOST_STAGES = [
   'fechado perdido',
   'fechado perdido para a concorrencia',
