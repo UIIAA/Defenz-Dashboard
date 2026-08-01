@@ -82,8 +82,10 @@ describe('resumirSheets — demais', () => {
 });
 
 describe('compararResumos', () => {
+  // baseline explícito vazio: este bloco testa a comparação crua, sem interferência
+  // do BASELINE de produção (que muda conforme a origem é apurada)
   it('igual em tudo → verde', () => {
-    const r = compararResumos('leads', { contagem: 10 }, { contagem: 10 });
+    const r = compararResumos('leads', { contagem: 10 }, { contagem: 10 }, []);
     expect(r.veredito).toBe('verde');
     expect(r.checagens).toEqual([
       { nome: 'contagem', neon: 10, sheets: 10, ok: true, status: 'ok', delta: 0 },
