@@ -65,9 +65,14 @@ colisão corrompendo dado outra vez. Nesse caso **reapure** — não atualize o 
 - Os dois primeiros são a **mesma ligação gravada mais de uma vez**. Aqui a planilha está
   inflada e o Neon está certo.
 - O terceiro é pior: **três chamadas com durações diferentes dividindo o mesmo `call_id`**.
-  A chave é montada como `data_hora_agente_destino` e, quando o **agente vem vazio** (repare
-  no `_` final), duas chamadas no mesmo segundo para o mesmo número colidem. **O `call_id`
-  não é único** — nesse caso o Neon guarda uma e descarta as outras.
+
+> **Correção de 01/08 (crítica da spec):** a causa-raiz descrita acima estava errada. Não é
+> "quando o agente/destino vem vazio" — uma das 5 chaves colididas tem **agente e destino
+> preenchidos** (`2026-04-13_10:43:41_Leonardo Alves_50422404`). A causa real é que a chave
+> `data_hora_agente_destino` **não tem identidade por perna de chamada**: quaisquer duas pernas
+> com esses 4 campos iguais colidem. Campo vazio só torna provável.
+> A correção está especificada em [`feature-call-id-unico.md`](features/feature-call-id-unico.md),
+> e o Callbox **já entrega um `uniqueid`** que o nó descarta.
 
 **Ação (não executada — decisão sua):** tornar a chave única no nó `Format Ligacoes Raw`
 (ex.: sufixo de sequência quando a chave repetir). Isso muda a chave da aba e mexe no

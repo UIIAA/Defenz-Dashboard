@@ -72,8 +72,10 @@ export const BASELINE: DivergenciaConhecida[] = [
     desde: '2026-08-01',
     motivo:
       '5 call_id repetidos na aba somam 7 linhas extras. A chave é data_hora_agente_destino e ' +
-      'colide quando o agente vem vazio — chamadas distintas dividem o mesmo id. O Neon deduplica ' +
-      'pela chave natural; a planilha, sem chave, acumula. RECORRENTE: +2 casos entre 30 e 31/07.',
+      'NÃO TEM IDENTIDADE POR PERNA: duas pernas com (data, segundo, agente, últimos-8-do-destino) ' +
+      'iguais colidem. Destino vazio torna provável, mas não é a condição — uma das 5 chaves tem ' +
+      'agente e destino preenchidos. O Neon deduplica pela chave natural; a planilha, sem chave, ' +
+      'acumula. RECORRENTE: +2 casos entre 30 e 31/07. Correção: docs/features/feature-call-id-unico.md',
     atestado: ATESTADO_28_07,
   },
   {
