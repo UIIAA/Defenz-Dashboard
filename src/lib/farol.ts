@@ -79,15 +79,22 @@ export function weekElapsed(p: BrtParts): number {
 }
 
 /**
- * Data de atribuição de um ganho. 13 dos 78 deals ganhos (R$ 78.186,59) NÃO têm
- * `closing_date` preenchido no Zoho — medido em 01/08/2026. Sem fallback essa receita não
- * caía em nenhuma semana nem mês do Farol, enquanto `metrics.ts` a contava normalmente pelo
- * `modified_time` em 14 pontos. O Farol era o único lugar que descartava.
- * Efeito aceito: um ganho sem data de fechamento é atribuído à semana da última modificação,
- * e migra de semana se o deal for editado — mesmo comportamento do resto do dashboard.
+ * Data de atribuição de um ganho — fonte única para o Farol e para o `/metas`.
+ *
+ * 13 dos 80 ganhos NÃO têm `closing_date` no Zoho (medido em 03/08/2026). Sem fallback essa
+ * receita não cai em semana nenhuma: era o que fazia o `/metas` mostrar R$ 12.076 de Venda
+ * Defenz em julho quando o correto era R$ 88.407,20.
+ *
+ * O fallback é `created_time`, NÃO `modified_time`, porque estas são telas HISTÓRICAS:
+ * `modified_time` reescreve o passado. Marcar a tag "Venda Defenz" — justamente o campo que
+ * `fonteVenda` lê — bumpa o `Modified_Time` e moveria a venda para a semana em que ela foi
+ * *classificada*, fazendo uma semana já batida despintar sozinha. `created_time` é imutável.
+ *
+ * Custo da escolha, medido nos 13 sem `closing_date`: 11 caem na MESMA semana pelas duas
+ * datas; só 2 diferem (Líder Gases, Bialer). Todos foram criados no mês em que foram ganhos.
  */
 export function dataAtribuicao(d: RawDeal): string {
-  return String(d.closing_date || d.modified_time || '').slice(0, 10);
+  return String(d.closing_date || d.created_time || '').slice(0, 10);
 }
 
 export function sumWon(deals: RawDeal[], start: string, end: string): number {

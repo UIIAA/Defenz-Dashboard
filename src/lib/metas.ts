@@ -10,7 +10,7 @@ import type {
   RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta, MetasConsolidado,
   EficienciaIndices, EficienciaDelta, MetasEficiencia,
 } from './types';
-import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade, isoDow } from './farol';
+import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade, isoDow, dataAtribuicao } from './farol';
 import { isClosedWon, dateInRange, classifyOrigin } from './metrics';
 import { dedupeByData, parseResumoRow } from './resumo-diario';
 
@@ -38,15 +38,18 @@ export interface WeekRevenueSplit {
   repasseCount: number;
 }
 
-// Receita ganha (mesma regra do Farol: isClosedWon + closing_date na janela),
-// particionada por fonteVenda. `defenz` alimenta a meta; `repasse` é informativo.
+// Receita ganha, particionada por fonteVenda. `defenz` alimenta a meta; `repasse` é
+// informativo. A data de atribuição vem de `dataAtribuicao` (farol.ts) — MESMA função que o
+// Farol usa, não uma cópia da regra. Até 03/08 esta linha usava `d.closing_date` direto,
+// enquanto o Farol já tinha ganhado o fallback: a mesma página exibia dois números
+// diferentes, e o consolidado de julho aparecia como R$ 12.076 em vez de R$ 88.407,20.
 export function weekRevenue(deals: RawDeal[], weekStart: string, weekEnd: string): WeekRevenueSplit {
   let defenz = 0;
   let repasse = 0;
   let defenzCount = 0;
   let repasseCount = 0;
   for (const d of deals) {
-    if (!isClosedWon(String(d.stage || '')) || !dateInRange(d.closing_date, weekStart, weekEnd)) continue;
+    if (!isClosedWon(String(d.stage || '')) || !dateInRange(dataAtribuicao(d), weekStart, weekEnd)) continue;
     const valor = Number(d.valor) || 0;
     if (fonteVenda(d) === 'defenz') { defenz += valor; defenzCount++; }
     else { repasse += valor; repasseCount++; }

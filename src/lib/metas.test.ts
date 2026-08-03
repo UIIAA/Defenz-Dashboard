@@ -26,7 +26,7 @@ const resumo = (data: string, fields: Partial<RawResumoDiario> = {}): RawResumoD
   ...fields,
 });
 
-describe('weekRevenue — atribuição por closing_date (mesma regra do Farol)', () => {
+describe('weekRevenue — atribuição via dataAtribuicao (mesma FUNÇÃO do Farol)', () => {
   // won() não seta lead_source → classifyOrigin('') cai no default 'direto' →
   // fonteVenda === 'defenz'. Por isso toda a receita destes testes cai no balde
   // `defenz` (repasse = 0); a partição em si é coberta no describe dedicado abaixo.
@@ -53,6 +53,31 @@ describe('weekRevenue — atribuição por closing_date (mesma regra do Farol)',
   it('"Contrato Enviado" conta como ganho', () => {
     const deals = [won(6000, '2026-07-14', 'Contrato Enviado')];
     expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 6000, repasse: 0, defenzCount: 1, repasseCount: 0 });
+  });
+
+  // feature-receita-julho-divergente: 13 dos 80 ganhos nao tem closing_date. Sem fallback
+  // eles nao caiam em semana nenhuma — era isso que mostrava R$ 12.076 de Venda Defenz em
+  // julho quando o correto eram R$ 88.407,20.
+  it('ganho SEM closing_date entra pela semana de criação', () => {
+    const deals: RawDeal[] = [{ stage: 'Fechado Ganho', valor: 7440, closing_date: '', created_time: '2026-07-14' }];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 7440, repasse: 0, defenzCount: 1, repasseCount: 0 });
+  });
+
+  it('closing_date tem precedência sobre created_time', () => {
+    const deals: RawDeal[] = [{ stage: 'Fechado Ganho', valor: 500, closing_date: '2026-07-14', created_time: '2026-06-01' }];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 500, repasse: 0, defenzCount: 1, repasseCount: 0 });
+  });
+
+  // O risco que fez escolher created_time em vez de modified_time: marcar a tag
+  // "Venda Defenz" no Zoho bumpa o Modified_Time, e a venda migraria de semana.
+  it('modified_time NÃO atribui — editar o deal não move a receita', () => {
+    const deals: RawDeal[] = [{ stage: 'Fechado Ganho', valor: 900, closing_date: '', created_time: '2026-07-14', modified_time: '2026-08-20' }];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 900, repasse: 0, defenzCount: 1, repasseCount: 0 });
+  });
+
+  it('ganho sem nenhuma das duas datas continua fora', () => {
+    const deals: RawDeal[] = [{ stage: 'Fechado Ganho', valor: 999 }];
+    expect(weekRevenue(deals, '2026-07-13', '2026-07-19')).toEqual({ defenz: 0, repasse: 0, defenzCount: 0, repasseCount: 0 });
   });
 });
 

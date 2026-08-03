@@ -134,40 +134,53 @@ describe('computeFarol — metadados', () => {
   });
 });
 
-// --- feature-cnpj-identidade-empresa: ganho sem closing_date ---
+// --- feature-receita-julho-divergente: ganho sem closing_date ---
 
 describe('computeFarol — ganho sem closing_date', () => {
-  // 13 dos 78 ganhos (R$ 78.186,59) não têm closing_date no Zoho. Antes o Farol descartava
-  // essa receita de todas as semanas e meses, enquanto metrics.ts a contava. Agora cai no
-  // modified_time, igual ao resto do dashboard.
-  const semFechamento = (valor: number, modified_time: string): RawDeal => ({
+  // 13 dos 80 ganhos não têm closing_date no Zoho. Sem fallback essa receita não caía em
+  // semana nenhuma. O fallback é created_time (IMUTÁVEL) e não modified_time: estas são
+  // telas históricas, e modified_time move a venda para a semana em que alguém editou o
+  // registro — inclusive ao marcar a tag "Venda Defenz", que é o campo que fonteVenda lê.
+  const semFechamento = (valor: number, created_time: string): RawDeal => ({
     stage: 'Fechado Ganho',
     valor,
     closing_date: '',
-    modified_time,
+    created_time,
   });
 
-  it('entra na semana pela data de modificação', () => {
+  it('entra na semana pela data de criação', () => {
     const now = new Date('2026-07-15T15:00:00Z'); // Qua 12:00 BRT, semana de 13/07
     const f = computeFarol([semFechamento(1736, '2026-07-15')], now);
     expect(f.semana.revenue).toBe(1736);
   });
 
-  it('entra no mês pela data de modificação', () => {
+  it('entra no mês pela data de criação', () => {
     const now = new Date('2026-07-15T15:00:00Z');
     const f = computeFarol([semFechamento(1736, '2026-07-15')], now);
     expect(f.mes.revenue).toBe(1736);
   });
 
-  it('closing_date continua tendo precedência sobre modified_time', () => {
+  it('closing_date continua tendo precedência sobre created_time', () => {
     const now = new Date('2026-07-15T15:00:00Z');
     const d: RawDeal = {
       stage: 'Fechado Ganho',
       valor: 500,
       closing_date: '2026-07-15',
-      modified_time: '2026-08-20', // fora da semana; não pode vencer
+      created_time: '2026-06-20', // fora da semana; não pode vencer
     };
     expect(computeFarol([d], now).semana.revenue).toBe(500);
+  });
+
+  it('modified_time NAO atribui — editar um deal nao move a receita de semana', () => {
+    const now = new Date('2026-07-15T15:00:00Z');
+    const d: RawDeal = {
+      stage: 'Fechado Ganho',
+      valor: 900,
+      closing_date: '',
+      created_time: '2026-07-15',
+      modified_time: '2026-08-20',
+    };
+    expect(computeFarol([d], now).semana.revenue).toBe(900);
   });
 
   it('sem nenhuma das duas datas continua fora', () => {
