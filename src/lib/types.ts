@@ -746,6 +746,15 @@ export interface Farol {
   generatedAt: string; // ISO do instante de cálculo
 }
 
+/**
+ * De onde o Farol do /metas está falando (feature-metas-farol-periodo):
+ *   'ao-vivo'         — o período selecionado alcança hoje; é "onde estou agora"
+ *   'fim-do-periodo'  — o período já fechou; o Farol mostra COMO O PERÍODO FECHOU
+ * Antes existia só o modo ao vivo: com "Mês passado" selecionado o Farol mostrava
+ * R$ 0 com badge vermelho "fora do ritmo", que era ruído, não informação.
+ */
+export type FarolRef = 'ao-vivo' | 'fim-do-periodo';
+
 // ─── Farol de Metas (feature-farol-metas, Fase 2 — Landed) ───────────────────
 // "Por que bati / não bati" por semana ISO (Seg–Dom), reusando resumo_diario + deals.
 export interface WeekEsforco {
@@ -779,11 +788,11 @@ export interface WeekMetric {
   diasUteis: number;
   // feature-metas-fonte-receita: `revenue` passou a significar SÓ a receita
   // "Venda Defenz" (fonteVenda === 'defenz') — é o que alimenta a meta/pctAbs/
-  // cor/label/diagnóstico. `revenueRepasse` é a receita "Repasse SS" (informativa,
-  // fora da meta). `revenueTotal` = revenue + revenueRepasse (reconcilia com o
+  // cor/label/diagnóstico. `revenueDirecionadoSS` é a receita "Repasse SS" (informativa,
+  // fora da meta). `revenueTotal` = revenue + revenueDirecionadoSS (reconcilia com o
   // Farol Fase 1 do /diario, que soma tudo). Ver docs/features/feature-metas-fonte-receita.md.
   revenue: number;
-  revenueRepasse: number;
+  revenueDirecionadoSS: number;
   revenueTotal: number;
   goal: number;      // GOAL_WEEK × (diasUteis / 5) — R$ 6.000 numa semana inteira
   pctAbs: number;     // revenue / goal (0 quando goal é 0)
@@ -802,10 +811,10 @@ export interface MetasConsolidado {
   weekEnd: string;        // domingo da semana mais recente da janela
   nWeeks: number;         // nº de semanas na janela
   revenue: number;        // Σ Venda Defenz (alimenta meta/cor/label)
-  revenueRepasse: number; // Σ Repasse SS (informativo)
-  revenueTotal: number;   // revenue + revenueRepasse
+  revenueDirecionadoSS: number; // Σ Repasse SS (informativo)
+  revenueTotal: number;   // revenue + revenueDirecionadoSS
   dealsDefenz: number;    // nº de negócios Venda Defenz na janela
-  dealsRepasse: number;   // nº de negócios Repasse SS na janela
+  dealsDirecionadoSS: number;   // nº de negócios Repasse SS na janela
   goal: number;           // GOAL_WEEK × nWeeks
   pctAbs: number;         // revenue / goal
   cor: FarolCor;
@@ -847,8 +856,9 @@ export interface MetasResponse {
   semanas: WeekMetric[];          // mais recente primeiro
   consolidado: MetasConsolidado;  // somatório da janela retornada
   periodo: MetasPeriodo | null;   // preenchido quando um intervalo foi selecionado
-  farol: Farol | null;            // Farol ao vivo (semana/mês), receita = Venda Defenz
-  farolRepasse: Farol | null;     // idem, mas receita = Repasse SS (informativo)
+  farol: Farol | null;            // Venda direta Defenz. Ver `farolRef` para a referência.
+  farolDirecionadoSS: Farol | null; // idem, Direcionado SS (informativo, fora da meta)
+  farolRef: FarolRef;             // 'ao-vivo' | 'fim-do-periodo'
   eficiencia: MetasEficiencia;    // índices Esforço→Vendas + delta vs janela anterior
   generatedAt: string;            // ISO do instante de cálculo
   _cached?: boolean;

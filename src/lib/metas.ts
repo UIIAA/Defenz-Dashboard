@@ -21,21 +21,21 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 //   categoria ∈ {direto, parceiro}  → 'defenz'  (nossa pela origem, via classifyOrigin(lead_source))
 //   tags contém "Venda Defenz"      → 'defenz'  (lead SS que a Defenz trabalhou, marcado no Zoho)
 //   senão (securisoft sem tag)      → 'repasse' (default conservador: SecuriSoft vendeu e repassou)
-export function fonteVenda(deal: RawDeal): 'defenz' | 'repasse' {
+export function fonteVenda(deal: RawDeal): 'defenz' | 'direcionado-ss' {
   const { categoria } = classifyOrigin(String(deal.lead_source || ''));
   if (categoria === 'direto' || categoria === 'parceiro') return 'defenz';
 
   const tags = String(deal.tags || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (tags.includes('venda defenz')) return 'defenz';
 
-  return 'repasse';
+  return 'direcionado-ss';
 }
 
 export interface WeekRevenueSplit {
   defenz: number;
-  repasse: number;
+  direcionadoSS: number;
   defenzCount: number;
-  repasseCount: number;
+  direcionadoSSCount: number;
 }
 
 // Receita ganha, particionada por fonteVenda. `defenz` alimenta a meta; `repasse` é
@@ -45,16 +45,16 @@ export interface WeekRevenueSplit {
 // diferentes, e o consolidado de julho aparecia como R$ 12.076 em vez de R$ 88.407,20.
 export function weekRevenue(deals: RawDeal[], weekStart: string, weekEnd: string): WeekRevenueSplit {
   let defenz = 0;
-  let repasse = 0;
+  let direcionadoSS = 0;
   let defenzCount = 0;
-  let repasseCount = 0;
+  let direcionadoSSCount = 0;
   for (const d of deals) {
     if (!isClosedWon(String(d.stage || '')) || !dateInRange(dataAtribuicao(d), weekStart, weekEnd)) continue;
     const valor = Number(d.valor) || 0;
     if (fonteVenda(d) === 'defenz') { defenz += valor; defenzCount++; }
-    else { repasse += valor; repasseCount++; }
+    else { direcionadoSS += valor; direcionadoSSCount++; }
   }
-  return { defenz, repasse, defenzCount, repasseCount };
+  return { defenz, direcionadoSS, defenzCount, direcionadoSSCount };
 }
 
 // Soma os campos de esforço da aba resumo_diario para os dias ÚTEIS (Seg–Sex) dentro
@@ -104,10 +104,10 @@ interface WeekRaw {
   weekStart: string;       // borda RECORTADA ao intervalo (não a segunda ISO)
   weekEnd: string;         // borda RECORTADA ao intervalo (não o domingo ISO)
   revenue: number;         // Venda Defenz — alimenta meta/pctAbs/cor/label/diagnóstico
-  revenueRepasse: number;  // Repasse SS — informativo
+  revenueDirecionadoSS: number;  // Repasse SS — informativo
   revenueTotal: number;    // defenz + repasse
   defenzCount: number;     // nº de negócios Venda Defenz na semana
-  repasseCount: number;    // nº de negócios Repasse SS na semana
+  direcionadoSSCount: number;    // nº de negócios Repasse SS na semana
   expected: number;        // esperado pelo pace no instante
   goal: number;            // GOAL_WEEK × (diasUteis / 5) — 0 se o recorte não tem dia útil
   diasUteis: number;       // dias Seg–Sex dentro do recorte (0..5)
@@ -215,9 +215,9 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
     reunioes: acc.reunioes + w.esforco.reunioes,
   }), zeroEsforco());
   const revenue = raw.reduce((s, w) => s + w.revenue, 0);
-  const revenueRepasse = raw.reduce((s, w) => s + w.revenueRepasse, 0);
+  const revenueDirecionadoSS = raw.reduce((s, w) => s + w.revenueDirecionadoSS, 0);
   const dealsDefenz = raw.reduce((s, w) => s + w.defenzCount, 0);
-  const dealsRepasse = raw.reduce((s, w) => s + w.repasseCount, 0);
+  const dealsDirecionadoSS = raw.reduce((s, w) => s + w.direcionadoSSCount, 0);
   const expected = raw.reduce((s, w) => s + w.expected, 0);
   // Σ das metas semanais, NÃO GOAL_WEEK × nWeeks nem (diasUteis/5) × GOAL_WEEK agregado:
   // com semanas recortadas a primeira forma superestima, e a segunda dá 27.599,999… em
@@ -231,10 +231,10 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
     weekEnd: newest.weekEnd,
     nWeeks,
     revenue,
-    revenueRepasse,
-    revenueTotal: revenue + revenueRepasse,
+    revenueDirecionadoSS,
+    revenueTotal: revenue + revenueDirecionadoSS,
     dealsDefenz,
-    dealsRepasse,
+    dealsDirecionadoSS,
     goal,
     pctAbs: goal > 0 ? revenue / goal : 0,
     esforco,
@@ -327,10 +327,10 @@ export function computeMetas(
       weekStart: ini,
       weekEnd: fim,
       revenue: rev.defenz,
-      revenueRepasse: rev.repasse,
-      revenueTotal: rev.defenz + rev.repasse,
+      revenueDirecionadoSS: rev.direcionadoSS,
+      revenueTotal: rev.defenz + rev.direcionadoSS,
       defenzCount: rev.defenzCount,
-      repasseCount: rev.repasseCount,
+      direcionadoSSCount: rev.direcionadoSSCount,
       expected,
       goal,
       diasUteis,
@@ -356,7 +356,7 @@ export function computeMetas(
       parcial: cur.parcial,
       diasUteis: cur.diasUteis,
       revenue: cur.revenue,
-      revenueRepasse: cur.revenueRepasse,
+      revenueDirecionadoSS: cur.revenueDirecionadoSS,
       revenueTotal: cur.revenueTotal,
       goal: cur.goal,
       pctAbs,

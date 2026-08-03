@@ -62,8 +62,8 @@ function DeltaBadge({ v, label }: { v: number | null; label?: string }) {
   );
 }
 
-// ─── Farol ao vivo (semana + mês) — receita = Venda Defenz; Repasse SS informativo ──
-function FarolBucketCard({ icon: Icon, title, b, repasse }: { icon: typeof Target; title: string; b: FarolBucket; repasse: number }) {
+// ─── Farol (semana + mês) — receita = Venda direta Defenz; Direcionado SS informativo ──
+function FarolBucketCard({ icon: Icon, title, b, direcionadoSS }: { icon: typeof Target; title: string; b: FarolBucket; direcionadoSS: number }) {
   const c = COR[b.cor];
   const fill = Math.min(Math.max(b.pctAbs, 0), 1) * 100;
   const expectedPct = b.goal > 0 ? Math.min(Math.max(b.expected / b.goal, 0), 1) * 100 : 0;
@@ -83,8 +83,8 @@ function FarolBucketCard({ icon: Icon, title, b, repasse }: { icon: typeof Targe
         <span className="text-2xl lg:text-3xl font-semibold tracking-tight text-slate-900 font-display tabular-nums">{brl(b.revenue)}</span>
         <span className="text-sm text-slate-400 tabular-nums">/ {brl(b.goal)}</span>
       </div>
-      {repasse > 0 && (
-        <p className="mt-0.5 text-[11px] text-slate-400">+ <span className="font-medium text-slate-500 tabular-nums">{brl(repasse)}</span> repasse SS (fora da meta)</p>
+      {direcionadoSS > 0 && (
+        <p className="mt-0.5 text-[11px] text-slate-400">+ <span className="font-medium text-slate-500 tabular-nums">{brl(direcionadoSS)}</span> direcionado SS (fora da meta)</p>
       )}
       <div className="relative mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
         <motion.div
@@ -109,41 +109,50 @@ function FarolBucketCard({ icon: Icon, title, b, repasse }: { icon: typeof Targe
 
 function FarolMetas({ res }: { res: MetasResponse }) {
   if (!res.farol) return null;
-  const rep = res.farolRepasse;
+  const dir = res.farolDirecionadoSS;
+  // feature-metas-farol-periodo: o Farol segue o período selecionado. Quando o período já
+  // fechou ele fala do ÚLTIMO dia dele — antes mostrava R$ 0 "fora do ritmo" para qualquer
+  // mês passado, o que era ruído.
+  const fechado = res.farolRef === 'fim-do-periodo';
+  const ate = res.periodo ? fmt(res.periodo.to) : null;
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">Farol — onde estou agora</h2>
-        <span className="text-[11px] text-slate-400">meta R$ 6.000/semana · ao vivo</span>
+        <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">
+          {fechado ? 'Farol — como o período fechou' : 'Farol — onde estou agora'}
+        </h2>
+        <span className="text-[11px] text-slate-400">
+          meta R$ 6.000/semana · {fechado && ate ? `posição em ${ate}` : 'ao vivo'}
+        </span>
       </div>
       <div className="flex flex-col sm:flex-row gap-3">
-        <FarolBucketCard icon={Target} title="Semana" b={res.farol.semana} repasse={rep?.semana.revenue ?? 0} />
-        <FarolBucketCard icon={CalendarDays} title="Mês" b={res.farol.mes} repasse={rep?.mes.revenue ?? 0} />
+        <FarolBucketCard icon={Target} title={fechado ? 'Última semana' : 'Semana'} b={res.farol.semana} direcionadoSS={dir?.semana.revenue ?? 0} />
+        <FarolBucketCard icon={CalendarDays} title="Mês" b={res.farol.mes} direcionadoSS={dir?.mes.revenue ?? 0} />
       </div>
     </div>
   );
 }
 
-// ─── Faturamento completo (hero) — Venda Defenz | Repasse SS | Total ───────────
+// ─── Venda ganha no período (hero) — Venda direta Defenz | Direcionado SS | Total ──
 function FaturamentoCompletoCard({ c }: { c: MetasConsolidado }) {
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 border-t-2 border-t-red-600 shadow-lg shadow-slate-200/50 p-5">
-      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Faturamento completo · {c.nWeeks} semana{c.nWeeks === 1 ? '' : 's'}</h2>
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Venda ganha no período · {c.nWeeks} semana{c.nWeeks === 1 ? '' : 's'}</h2>
       <div className="flex flex-wrap items-end gap-6">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Venda Defenz</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Venda direta Defenz</p>
           <p className="text-2xl font-semibold text-slate-700 tabular-nums">{brl(c.revenue)}</p>
           <p className="text-xs text-slate-400">{c.dealsDefenz} venda{c.dealsDefenz === 1 ? '' : 's'}{c.dealsDefenz ? ` · ticket ${brl(Math.round(c.revenue / c.dealsDefenz))}` : ''}</p>
         </div>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Repasse SS</p>
-          <p className="text-2xl font-semibold text-slate-500 tabular-nums">{brl(c.revenueRepasse)}</p>
-          <p className="text-xs text-slate-400">{c.dealsRepasse} repasse{c.dealsRepasse === 1 ? '' : 's'}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Direcionado SS</p>
+          <p className="text-2xl font-semibold text-slate-500 tabular-nums">{brl(c.revenueDirecionadoSS)}</p>
+          <p className="text-xs text-slate-400">{c.dealsDirecionadoSS} negócio{c.dealsDirecionadoSS === 1 ? '' : 's'}</p>
         </div>
         <div className="border-l border-slate-200 pl-6">
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Total</p>
           <p className="text-4xl font-semibold text-slate-900 tabular-nums">{brl(c.revenueTotal)}</p>
-          <p className="text-xs text-slate-400">faturamento do período</p>
+          <p className="text-xs text-slate-400">venda ganha no período</p>
         </div>
       </div>
     </div>
@@ -215,7 +224,7 @@ function PorqueBloco({ w, isRetro }: { w: WeekMetric; isRetro: boolean }) {
   );
 }
 
-// Tooltip customizado: total (Venda Defenz + Repasse SS) + Meta + Esforço.
+// Tooltip customizado: total (Venda direta Defenz + Direcionado SS) + Meta + Esforço.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ReceitaTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -242,7 +251,7 @@ function ReceitaTooltip({ active, payload, label }: any) {
 interface ChartRow {
   label: string;
   receitaDefenz: number;
-  receitaRepasse: number;
+  receitaDirecionadoSS: number;
   receitaTotal: number;
   meta: number;
   esforcoTotal: number;
@@ -254,7 +263,7 @@ function buildChartData(semanas: WeekMetric[], hoje: string): ChartRow[] {
   return [...semanas].reverse().map(w => ({
     label: weekLabel(w),
     receitaDefenz: w.revenue,
-    receitaRepasse: w.revenueRepasse,
+    receitaDirecionadoSS: w.revenueDirecionadoSS,
     receitaTotal: w.revenueTotal,
     meta: w.goal,
     parcial: w.parcial,
@@ -292,7 +301,7 @@ function ReceitaMetaChart({ data, isInterval }: { data: ChartRow[]; isInterval: 
           <ReTooltip content={ReceitaTooltip} />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
           <Line type="monotone" dataKey="meta" name="Meta da semana" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
-          <Bar dataKey="receitaDefenz" name="Venda Defenz" minPointSize={3} maxBarSize={48} radius={[4, 4, 0, 0]}>
+          <Bar dataKey="receitaDefenz" name="Venda direta Defenz" minPointSize={3} maxBarSize={48} radius={[4, 4, 0, 0]}>
             <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#64748b' }} />
             {data.map((row) => (
               <Cell key={row.label} fill={barColor(row.receitaDefenz, row.meta)} fillOpacity={row.emCurso ? 0.45 : 1} />
@@ -308,18 +317,18 @@ function ReceitaMetaChart({ data, isInterval }: { data: ChartRow[]; isInterval: 
   );
 }
 
-// Gráfico B — Repasse SS. Informativo: não conta na meta semanal, por isso um único
-// neutro claro (sem gradação por atingimento — não há "meta" pro repasse).
-function RepasseChart({ data }: { data: ChartRow[] }) {
+// Gráfico B — Direcionado SS. Informativo: não conta na meta semanal, por isso um único
+// neutro claro (sem gradação por atingimento — não há "meta" pro Direcionado SS).
+function DirecionadoSSChart({ data }: { data: ChartRow[] }) {
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
-      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Repasse SS</h2>
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Direcionado SS</h2>
       <ResponsiveContainer width="100%" height={180}>
         <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
           <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
           <YAxis tickFormatter={tickK} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
           <ReTooltip content={ReceitaTooltip} />
-          <Bar dataKey="receitaRepasse" name="Repasse SS" fill="#cbd5e1" maxBarSize={48} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="receitaDirecionadoSS" name="Direcionado SS" fill="#cbd5e1" maxBarSize={48} radius={[4, 4, 0, 0]} />
         </ComposedChart>
       </ResponsiveContainer>
       <p className="mt-2 text-[11px] text-slate-400">Informativo — não conta na meta semanal.</p>
@@ -504,7 +513,7 @@ export const MetasDashboard = () => {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 font-display">Farol de Metas</h1>
-            <p className="text-sm text-slate-500 mt-1">Meta semanal: <span className="font-semibold text-slate-700">R$ 6.000</span> · só Venda Defenz — Repasse SS é informativo</p>
+            <p className="text-sm text-slate-500 mt-1">Meta semanal: <span className="font-semibold text-slate-700">R$ 6.000</span> · só Venda direta Defenz — Direcionado SS é informativo</p>
           </div>
           <div className="flex items-center gap-2">
             {response?._cached && <span className="text-xs text-amber-500">cache</span>}
@@ -584,7 +593,7 @@ export const MetasDashboard = () => {
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
           <p className="text-xs text-slate-400">
-            Aqui a meta conta só a <span className="font-medium text-slate-500">Venda Defenz</span>; o Repasse SS é informativo. O esforço (ligações, e-mails, apresentações, propostas, reuniões) conta de <span className="font-medium text-slate-500">segunda a sexta</span>; a receita segue atribuída à semana inteira (Seg–Dom).
+            Aqui a meta conta só a <span className="font-medium text-slate-500">Venda direta Defenz</span>; o Direcionado SS é informativo. A palavra &ldquo;repasse&rdquo; fica reservada para dinheiro que sai para a SecuriSoft — o painel ainda não mostra margem nem custo. O esforço (ligações, e-mails, apresentações, propostas, reuniões) conta de <span className="font-medium text-slate-500">segunda a sexta</span>; a receita segue atribuída à semana inteira (Seg–Dom).
           </p>
 
           {response?.consolidado && <FaturamentoCompletoCard c={response.consolidado} />}
@@ -598,7 +607,7 @@ export const MetasDashboard = () => {
           {semanas.length > 1 && (
             <>
               <ReceitaMetaChart data={chartData} isInterval={isInterval} />
-              <RepasseChart data={chartData} />
+              <DirecionadoSSChart data={chartData} />
             </>
           )}
 

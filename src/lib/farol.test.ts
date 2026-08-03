@@ -190,3 +190,28 @@ describe('computeFarol — ganho sem closing_date', () => {
     expect(f.mes.revenue).toBe(0);
   });
 });
+
+// --- feature-metas-farol-periodo: Farol calculado no fim de um período fechado ---
+
+describe('computeFarol com referência no fim do período', () => {
+  // A rota passa `new Date(`${to}T23:59:59-03:00`) quando o período já fechou. Antes ela
+  // passava sempre `now`, e com "Mês passado" aberto o Farol mostrava R$ 0 "fora do ritmo".
+  const refFimDeJulho = new Date('2026-07-31T23:59:59-03:00');
+
+  it('enxerga a receita da última semana do período', () => {
+    const d: RawDeal = { stage: 'Fechado Ganho', valor: 9000, closing_date: '2026-07-30' };
+    const f = computeFarol([d], refFimDeJulho);
+    expect(f.semana.revenue).toBe(9000);
+  });
+
+  it('período encerrado tem pace cheio — expected = meta da semana', () => {
+    const f = computeFarol([], refFimDeJulho);
+    expect(f.semana.expected).toBe(f.semana.goal);
+  });
+
+  it('não enxerga receita posterior ao fim do período', () => {
+    const d: RawDeal = { stage: 'Fechado Ganho', valor: 9000, closing_date: '2026-08-05' };
+    expect(computeFarol([d], refFimDeJulho).semana.revenue).toBe(0);
+    expect(computeFarol([d], refFimDeJulho).mes.revenue).toBe(0);
+  });
+});
