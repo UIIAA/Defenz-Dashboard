@@ -60,36 +60,14 @@ const ATESTADO_28_07 = 'docs/ATESTADO_PARIDADE_NEON_2026-07-28.md';
  * (diretriz de 28/07: nada que o time sinta). Some a entrada quando a origem for corrigida.
  */
 export const BASELINE: DivergenciaConhecida[] = [
-  // ATENÇÃO: estes dois números NÃO são estáveis. A colisão de call_id gera um caso
-  // NOVO a cada 1–2 dias (apurado em 01/08: casos novos em 30/07 e 31/07, ambos com
-  // agente vazio na chave). Ou seja: este baseline volta a quebrar sozinho, e isso é o
-  // sintoma — não o defeito. Enquanto a chave não for corrigida na origem, `ligacoes`
-  // não consegue ficar 7 dias verde. Ver §Decisão pendente no atestado.
-  {
-    tabela: 'ligacoes',
-    checagem: 'contagem',
-    delta: -7,
-    desde: '2026-08-01',
-    motivo:
-      '5 call_id repetidos na aba somam 7 linhas extras. A chave é data_hora_agente_destino e ' +
-      'NÃO TEM IDENTIDADE POR PERNA: duas pernas com (data, segundo, agente, últimos-8-do-destino) ' +
-      'iguais colidem. Destino vazio torna provável, mas não é a condição — uma das 5 chaves tem ' +
-      'agente e destino preenchidos. O Neon deduplica pela chave natural; a planilha, sem chave, ' +
-      'acumula. RECORRENTE: +2 casos entre 30 e 31/07. Correção: docs/features/feature-call-id-unico.md',
-    atestado: ATESTADO_28_07,
-  },
-  {
-    tabela: 'ligacoes',
-    checagem: 'soma_duracao',
-    delta: -83,
-    desde: '2026-08-01',
-    motivo:
-      'Soma das durações das 7 linhas descartadas pela chave (1 + 16 + 50 + 7 + 9). Era −52 em ' +
-      '28/07 e −67 em 29/07: o appendOrUpdate casa a chave errada e sobrescreve uma chamada com os ' +
-      'dados de outra — a ligação de 10s do grupo das 14:48 foi perdida NA PLANILHA. Se mudar de ' +
-      'novo, é a colisão corrompendo dado outra vez: REAPURE, não atualize o número.',
-    atestado: ATESTADO_28_07,
-  },
+  // As duas entradas de `ligacoes` (contagem −7, soma_duracao −83) foram REMOVIDAS em
+  // 02/08/2026, depois do primeiro verde com delta 0 — a própria rota já as acusava como
+  // `obsoleto`. A causa foi corrigida na origem, não no comparador:
+  //   • `Format Ligacoes Raw` passou a usar chave base + ordinal derivado do CONTEÚDO
+  //     (feature-call-id-unico, Etapa B′). `uniqueid` foi medido e REPROVADO como chave:
+  //     233 colisões contra 6 da chave base — ele identifica o canal, não a perna.
+  //   • As 14 linhas de resíduo saíram da aba e as 5 chaves órfãs saíram do Neon.
+  // Aba e Neon fecharam em 12.560 = nº de registros do payload.
   {
     tabela: 'leads',
     checagem: 'contagem',

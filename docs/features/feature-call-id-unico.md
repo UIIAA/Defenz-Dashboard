@@ -1,153 +1,148 @@
-# Spec — `call_id` único: parar de descartar o identificador do Callbox
+# Spec — `call_id` único: chave com identidade por perna de chamada
 
-> **v2 — pós-crítica adversarial (01/08/2026).** A v1 recomendava reconstruir a aba e foi
-> reprovada: continha 4 bloqueadores, um deles pior que o problema original. Esta versão
-> inverte a recomendação. **Status: aguardando aprovação.**
+> **v3 — pós-execução da Etapa A (01/08/2026, 21:38, execução n8n `90899`).** A Etapa A rodou e
+> foi medida. O resultado **refuta a premissa central das v1 e v2**: `uniqueid` não serve como
+> chave. A Etapa B está **cancelada** e substituída pela Etapa B′ abaixo, que é menor, não exige
+> migração e não tem nenhum dos 10 cuidados de risco da versão anterior.
+> **Status: Etapa B′ IMPLEMENTADA em 01/08/2026 23:15** — `Format Ligacoes Raw` já usa base +
+> ordinal derivado do conteúdo. Falta a limpeza manual das linhas órfãs (§Limpeza).
 >
-> Origem: achado do portão de paridade — [`ATESTADO_PARIDADE_NEON_2026-07-28.md`](../ATESTADO_PARIDADE_NEON_2026-07-28.md).
+> Histórico: v1 (reconstruir a aba com `call_id = uniqueid`) reprovada por 4 bloqueadores.
+> v2 dividiu em Etapa A (estancar) + Etapa B (chave definitiva `cb_${uniqueid}`).
+> Origem: portão de paridade — [`ATESTADO_PARIDADE_NEON_2026-07-28.md`](../ATESTADO_PARIDADE_NEON_2026-07-28.md).
 
-## Problema
+## Estado atual (medido, não suposto)
 
-O nó `Format Ligacoes Raw` (workflow `QjnzGicZHIPBNN1g`) **sintetiza** a chave da ligação:
-
-```js
-call_id: `${isoDate}_${timePart}_${agentName}_${(c.destiny||'').replace(/\D/g,'').slice(-8)}`
-```
-
-### Causa-raiz (corrigida na v2)
-
-A v1 dizia "quando `destiny` vem nulo". **Está errado** — uma das 5 chaves colididas tem
-agente e destino preenchidos:
-
-```
-2026-04-13_10:43:41_Leonardo Alves_50422404   x2   durs 1,1      ← destino preenchido
-2026-07-24_14:49:15_31987678836_              x3   durs 8,8,8
-2026-07-24_14:48:07_31987678836_              x3   durs 25,25,25
-2026-07-30_10:09:11_8534661111_               x2   durs 7,7
-2026-07-31_14:58:56_89999360100_              x2   durs 9,9
-```
-
-A causa real: **a chave não tem identidade por perna de chamada.** Quaisquer duas pernas com
-(data, segundo, agente, últimos-8-do-destino) iguais colidem. Destino vazio só torna isso
-muito provável — não é a condição.
-
-### Não é duplicata: é perda de dado
-
-O par de 30/07 tinha **status diferentes** (`Atendida`/ANSWERED e `Nao Atendida`/NO ANSWER):
-duas pernas reais de uma discagem que tocou dois ramais. Só uma sobrevive.
-
-Pior: `Sheets Ligacoes Raw` usa `appendOrUpdate` com `matchingColumns: [call_id]`. Com a chave
-colidida ele **casa a linha errada e sobrescreve uma chamada com os dados de outra**, dentro da
-planilha. Medido em três dias no grupo das 14:48: `10,25,25` → `25,25,25` → `25,25,25`.
-A ligação de 10 segundos deixou de existir na planilha.
-
-> Hoje **todos os 5 grupos têm durações idênticas dentro do grupo** — a corrupção já achatou
-> tudo. Isso importa para a conferência: não dá mais para distinguir "a chave separou as pernas"
-> de "a origem mandou a mesma perna 2×" olhando a aba. Só o payload cru resolve.
-
-### Ritmo
-
-Casos novos em 30/07 e 31/07 — um a cada 1–2 dias. Enquanto durar, `ligacoes` **nunca fecha
-7 dias verdes**, porque o baseline quebra sozinho antes.
-
-## A chave que já existe
-
-O Callbox retorna `uniqueid` (Asterisk `epoch.sequencial`) e o nó descarta:
-
-```jsonc
-{ "origin": "Leonardo Alves <100>", "date": "31-07-2026 16:44:44",
-  "destiny": "08221234389", "duration": "59",
-  "uniqueid": "1785527084.37399" }
-```
-
-## ⚠️ A armadilha que reprovou a v1
-
-`uniqueid` **não pode ser usado cru**. O nó grava com semântica `USER_ENTERED`, e a evidência
-está na própria aba: `destino` é emitido como string e volta do gviz como
-`{"type":"number","v":3.1987678836E10}`. `"1785527084.37399"` é numérico.
-
-| Consequência | Efeito |
-|---|---|
-| Zeros à direita somem | `…37400`, `…3740` e `…374` viram a mesma célula — **colisão nova** |
-| Sheets guarda ~15 dígitos | `epoch(10)+seq(5)` = 15, no limite; sequencial de 6 dígitos arredonda |
-| `appendOrUpdate` compara string emitida × número lido | **nunca casa → +12.560 linhas por run, 2× ao dia** |
-
-**Regra inegociável: a chave tem que ser texto.** Prefixo `cb_` resolve.
-
-## Recomendação (invertida na v2): fazer em duas etapas
-
-### Etapa A — estancar agora (1 linha, sem migração)
-
-Desempatar **apenas** quando a chave base repetir dentro do lote:
+A Etapa A está no grafo **publicado** de `QjnzGicZHIPBNN1g` (versão 7, 01/08 20:41) e executou:
 
 ```js
-// dentro do map, após montar a base:
-const base = `${isoDate}_${timePart}_${agentName}_${dest8}`;
-// 2ª+ ocorrência da mesma base ganha sufixo textual estável
-const call_id = vistos.has(base) ? `${base}#cb_${c.uniqueid}` : base;
+const call_id = (vistos.has(base) && c.uniqueid) ? `${base}#cb_${c.uniqueid}` : base;
 ```
 
-- Chave continua **texto** — imune à armadilha acima.
-- Ids históricos preservados → **nenhuma migração**, nenhuma janela sem aba, nenhum truncate.
-- Custo: salto único de ~+12 linhas no primeiro run (as pernas re-chaveadas são anexadas sem
-  apagar as antigas). Delta fixo, conhecido, e é exatamente o que o BASELINE sabe representar.
-- **Estanca a corrupção em até 12h.**
+Aba `ligacoes` antes → depois: **12.560 → 12.567 linhas**, 7 chaves com sufixo `#cb_`,
+`cols[0].type === "string"` (a armadilha do número não se materializou). Único escritor da aba
+— o Snapshot Diário (`aMhvdTP5aAi0Z1sf`) só lê.
 
-### Etapa B — chave definitiva (`cb_${uniqueid}`), com janela combinada
+**Mas as chaves repetidas subiram de 5 para 7, e as linhas extras de 7 para 9**: duas das sete
+chaves novas nasceram duplicadas.
 
-Só depois da Etapa A estabilizada, e com todos os cuidados abaixo — que a v1 não tinha.
+## A premissa que caiu
 
-## Cuidados obrigatórios da Etapa B (achados da crítica)
+> «O Callbox retorna `uniqueid` e o nó descarta.» — verdade. **Mas descartar não era o defeito.**
 
-| # | Cuidado | Por quê |
+Medido no payload cru da execução `90899` (janela 24/07 14:40 → 31/07 16:44, **1.413 registros**):
+
+| chave candidata | valores distintos | colisões |
+|---|---:|---:|
+| `uniqueid` | 1.180 | **233** |
+| `uniqueid` + `date` | 1.407 | 6 |
+| `uniqueid` + `interface` + `event` | 1.397 | 16 |
+| **chave atual** `data_hora_agente_destino` | 1.407 | 6 |
+| base + `interface`/`event`/`duração`/`disposição` | 1.409 | 4 |
+| **registro inteiro (todos os 12 campos)** | 1.409 | **4** |
+
+Três leituras, todas contra-intuitivas:
+
+1. **`uniqueid` é pior que a chave que já existe** — 233 colisões contra 6. Ele identifica o
+   *canal*, não a perna. Uma entrante para o ring group `ToquegeralVenda` gera 5 registros com
+   o mesmo `uniqueid`, distintos em `interface` (PJSIP/Local), `event` (Atendimento/Falha),
+   `status`, hora (14:49:23 × 14:49:15) e `duration` (11 × 8). `userfield` é **idêntico** entre
+   elas (mesma gravação) — também não desempata. Adotar `cb_${uniqueid}` como chave definitiva
+   colapsaria ~19% das ligações.
+2. **A chave atual quase não erra** — 6 em 1.413 (0,4%). O problema nunca foi a fórmula da
+   chave; foi não ter nada para desempatar os poucos empates.
+3. **Nenhum conteúdo separa tudo.** O teto é 1.409: **4 registros são byte-idênticos** nos 12
+   campos. Não existe chave natural possível para eles. Exemplo real:
+   `31987678836 · 24-07 14:49:15 · NO ANSWER · Atendimento · dur 8` **×3**.
+
+## Etapa B′ — chave definitiva (substitui a Etapa B)
+
+Manter a chave base e desempatar por **ordinal derivado do conteúdo**:
+
+```js
+// 1) agrupa por chave base (a de hoje — ids históricos preservados)
+// 2) dentro do grupo, ordena por (interface, event, duracao, disposicao) — ordem vem do
+//    CONTEÚDO, não da ordem em que o Callbox devolveu: estável entre runs
+// 3) 1ª ocorrência fica com a base crua; 2ª+ ganham "#2", "#3", ...
+const call_id = i === 0 ? base : `${base}#${i + 1}`;
+```
+
+Medido no mesmo payload: **1.413 chaves para 1.413 registros — zero colisões**, por construção.
+**6 ids mudam** (0,4%); os outros 1.407 ficam byte-idênticos aos de hoje.
+
+Por que isso é melhor que a Etapa B cancelada:
+
+| | Etapa B (cancelada) | Etapa B′ |
 |---|---|---|
-| 1 | **Pausar** `QjnzGicZHIPBNN1g` antes de tudo | 3 gatilhos ativos, incluindo o **webhook que o `/api/dashboard` dispara** — um usuário clicando atualizar inicia run concorrente. Dois runs contra aba vazia = 25k linhas |
-| 2 | **Desabilitar `Ingest → Neon: ligacoes`** durante a migração | o ingest faz upsert e **nunca delete**: durante os passos, o Neon acumularia chave velha + nova ≈ 25k linhas, e o portão ficaria vermelho por desenho — treinando o operador a ignorar vermelho |
-| 3 | Criar a aba nova **à mão, com os 8 cabeçalhos exatos** | `appendOrUpdate` **não cria aba nem cabeçalho**, e o nó tem `continueOnFail: true` → falharia em silêncio com a execução "verde" |
-| 4 | Sequência do rename: renomear old → renomear v2 → **editar o nó** → reativar | o `sheetName` é por **nome**; renomear sem editar o nó o deixa apontando para aba inexistente, e o `continueOnFail` engole o erro |
-| 5 | Renames em segundos, fora de 6h/18h/17h50 | sem aba `ligacoes`, o gviz devolve **sheet 0 com HTTP 200**. Hoje passa por sorte (sheet 0 *é* `ligacoes`); depois de apagar a antiga, deixa de passar |
-| 6 | Antes de apagar `ligacoes_old`: trocar os 5 `fetchFromSheets("ligacoes")` por `fetchTabStrict('ligacoes', ['call_id','data'])` | `dashboard-sheets`, `operational`, `export/excel`, `ligacoes-serie`, `relatorio-mensal` leem **sem assinatura** — é o padrão exato do bug "11,5k ligações viraram reunião" |
-| 7 | Pré-condição no fetch: exigir `all.length === Number(total)` e `reportedPages <= 20`, e **falhar** | `Callbox Fetch All Pages` engole erro de página (`catch { console.log }`) e tem teto de 20 páginas. Hoje é inofensivo porque a aba acumula; **numa aba reconstruída, uma página perdida vira buraco permanente** |
-| 8 | Descartar chamada **sem `uniqueid`** antes de escrever | `call_id` vazio no `appendOrUpdate` casa contra células vazias e colapsa escritas numa linha |
-| 9 | Tratar o placeholder `call_id: 'none'` | com `allCalls.length === 0`, o nó grava `none` como primeira linha da aba nova |
-| 10 | Manter o header da coluna como **`call_id`** | `schema.ts`, `repo.ts` (coluna de conflito), `backfill-neon.mjs:33` e a assinatura da paridade dependem do nome |
+| Reconstruir a aba | sim | **não** |
+| Pausar o workflow / janela combinada | sim | **não** |
+| Desabilitar o ingest do Neon | sim | **não** |
+| Criar aba à mão, renomear, apagar a antiga | sim | **não** |
+| Ids históricos | todos mudam | **99,6% preservados** |
+| Colisões residuais | ~19% | **0** |
+| Cuidados obrigatórios | 10 | 2 (abaixo) |
 
-## Conferência (critério corrigido)
+Some quase inteiro o risco da v2: os 10 cuidados existiam porque a aba seria reconstruída.
+Sem reconstrução, 8 deles deixam de existir.
 
-A v1 esperava `linhas(v2) == linhas + 7`. **Errado**: as 7 linhas extras **já existem
-fisicamente** — a corrupção sobrescreveu valores, não apagou linhas. Re-chavear não cria
-linhas, só faz 12.560 linhas terem 12.560 chaves.
+### Os 2 cuidados que permanecem
 
-Critério correto, medido no **payload cru** (não na aba, que já está contaminada):
+1. **A chave continua texto.** `#2` garante isso sozinho — mas se alguém trocar o sufixo por
+   número puro, a armadilha do `USER_ENTERED` volta (`cols[0].type` deixa de ser `string` e o
+   `appendOrUpdate` nunca mais casa). Conferir `cols[0].type === "string"` no gviz após o run.
+2. **A estabilidade do ordinal depende de ordenar pelo conteúdo, não pela ordem do payload.**
+   Ordenar pela ordem de chegada faz duas pernas trocarem de sufixo entre runs, e o
+   `appendOrUpdate` reescreve uma linha com os dados da outra — de volta ao defeito original,
+   de forma mais discreta. Para os 4 registros byte-idênticos a troca é inócua (são
+   indistinguíveis); para os demais, não.
 
-- `linhas(v2) == new Set(allCalls.map(c => c.uniqueid)).size`
-- `all.length === Number(first.data.total)` (nenhuma página perdida)
-- Σ duração deve **cair** ou ficar igual, nunca subir (hoje 619.507s, com valores achatados)
-- gviz da aba nova: `cols[0].type === "string"` — prova que a chave não virou número
+## Limpeza de uma vez só (fora do código)
 
-## Riscos
+A Etapa B′ **não apaga nada sozinha**. Medido na aba depois do primeiro run com a B′
+(execução `90920`, 01/08 23:16 — 12.574 linhas): **14 linhas a remover**, todas identificáveis
+por busca exata:
 
-1. **`uniqueid` pode repetir.** O modo real de colisão de CDR no Asterisk **não** é reuso de
-   epoch (como a v1 supunha): é **mais de um CDR por canal** — transferência, `forkcdr`,
-   CDR residual — que compartilham `uniqueid` **e data**. Logo o fallback `uniqueid + date`
-   da v1 **não resolveria**. Medir no payload cru antes, e definir o desempate então.
-   `userfield` não serve: é nulo quando não houve gravação.
-2. **`Parse Ligacoes` do Snapshot Diário** filtra `digcount(destiny) >= 8` no caminho live e
-   **não filtra** no caminho da aba — justamente as linhas de destino vazio (**275** hoje,
-   2,2%). Os dois caminhos já divergem e vão divergir mais.
-3. **A corrupção passada não se recupera pela aba** — mas o Callbox ainda tem o registro, então
-   a Etapa B recupera o que a planilha destruiu.
+1. **7 linhas com `#cb_` no `call_id`** — escritas pela Etapa A. Com a B′ no ar essas chaves
+   nunca mais são emitidas: são órfãs permanentes.
+2. **7 cópias excedentes das 5 chaves-base antigas** — o rastro da corrupção original. Agora só
+   a 1ª perna reivindica a chave-base; as outras migraram para `#2`/`#3` e as linhas velhas
+   ficaram para trás.
 
-## Baseline
+12.574 − 14 = **12.560**, que é o nº de registros do payload. É esse o alvo.
 
-Remover as duas entradas de `ligacoes` de `paridade.ts` **só depois do primeiro verde
-pós-migração** — enquanto o delta não zerar, remover antes transforma resíduo em `divergente`.
-Com o baseline presente e delta 0, a rota já grita `baseline_obsoleto` sozinha.
+Enquanto elas existirem, o `contagem` de `ligacoes` no portão **não chega a zero**. A remoção é
+o que fecha o baseline — não há como reapurar para verde sem ela.
 
-No mesmo commit, corrigir o `motivo` do baseline e o atestado, que hoje repetem a causa-raiz
-errada ("agente vazio").
+## Conferência
+
+Medir sempre no **payload cru**, nunca na aba (que ainda carrega o rastro):
+
+- `new Set(chaves).size === registros.length` no lote inteiro → 0 colisões
+- `linhas(aba) === registros distintos do payload` depois da limpeza
+- gviz: `cols[0].type === "string"`
+- Σ duração não pode **subir** sem que o nº de linhas suba junto
+- `all.length === Number(first.data.total)` (nenhuma página perdida) — segue valendo, o
+  `Callbox Fetch All Pages` ainda engole erro de página com `catch { console.log }`
+
+## Pendências antes de implementar
+
+1. **A medição é de uma amostra: 1.413 dos ~12.560 registros** (a janela mais recente,
+   24/07→31/07 — o corpo da execução foi truncado na leitura). Repetir a contagem sobre o lote
+   inteiro antes de aprovar. A expectativa é que a proporção se mantenha, não que os números se
+   repitam.
+2. **Verificar o run das 06:00 de 02/08**: se a aba passar de 12.567 linhas, a Etapa A está
+   anexando a cada run — as 2 chaves sufixadas duplicadas casariam a mesma linha. Seria modo de
+   falha novo, e antecipa a Etapa B′ de "melhoria" para "correção urgente".
+
+## Baseline do portão
+
+Os dois registros de `ligacoes` em `src/lib/ingest/paridade.ts` (`contagem −7`,
+`soma_duracao −83`) estão **desatualizados desde a Etapa A** — hoje são 9 linhas extras.
+Reapurar após a limpeza, e só remover as entradas depois do primeiro verde com delta 0.
+`ligacoes` segue sem condição de fechar 7 dias verdes até lá.
 
 ## Fora de escopo
 
-`Definir periodo` e o tamanho da janela. O duplicado de `leads` (`Wintress`) é de outra
-natureza — linha repetida na aba, sem colisão de chave.
+`Definir periodo` e o tamanho da janela. O duplicado de `leads` (`Wintress`) é outra natureza —
+linha repetida na aba, sem colisão de chave. O filtro `digcount(destiny) >= 8` divergente entre
+os dois caminhos do `Parse Ligacoes` (Snapshot Diário) continua aberto, agora como item próprio.
