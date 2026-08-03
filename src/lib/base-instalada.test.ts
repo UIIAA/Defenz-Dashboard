@@ -58,17 +58,29 @@ const wonCnpj = (nome: string, cnpj: string, licencas: number): RawDeal => ({
 });
 
 describe('identidade por CNPJ', () => {
-  it('caso Estaleiro: duas vendas reais viram 1 cliente com as licenças somadas', () => {
-    // Medido no Zoho em 01/08/2026: dois deals ganhos, mesmo CNPJ, 200 endpoints cada.
-    // NÃO é duplicata — foram duas vendas (confirmado). 1 cliente, 400 licenças, 2 negócios.
+  it('caso AMGS: dois negócios reais da mesma empresa viram 1 cliente', () => {
+    // Medido no Zoho: dois deals ganhos, mesmo CNPJ, 105 e 10 endpoints, valores distintos.
+    // São vendas separadas — 1 cliente, 115 licenças, 2 negócios.
     const r = aggregateBaseInstalada([
-      wonCnpj('ESTALEIRO ATLANTICO SUL S/A EM RECUPERACAO JUDICIAL', '07.699.082/0001-53', 200),
-      wonCnpj('ESTALEIRO ATLANTICO SUL', '07699082000153', 200),
+      wonCnpj('AMGS COMERCIO E REPRESENTACOES LTDA', '20.858.411/0001-20', 105),
+      wonCnpj('AMGS Comércio e Representações', '20858411000120', 10),
     ]);
     expect(r.totalClientes).toBe(1);
-    expect(r.totalLicencas).toBe(400);
+    expect(r.totalLicencas).toBe(115);
     expect(r.clientes[0].negocios).toBe(2);
-    expect(r.clientes[0].cnpj).toBe('07.699.082/0001-53');
+    expect(r.clientes[0].cnpj).toBe('20.858.411/0001-20');
+  });
+
+  it('um único negócio não vira dois clientes (caso Estaleiro, pós-limpeza)', () => {
+    // O Estaleiro tinha um SEGUNDO registro de R$ 7.540 que NÃO era venda: era o custo da
+    // SecuriSoft, duplicado pela esteira de onboarding. Deletado no Zoho em 02/08 e removido
+    // da aba/Neon em 03/08. Sobra 1 negócio, 200 licenças — não 400.
+    const r = aggregateBaseInstalada([
+      wonCnpj('ESTALEIRO ATLANTICO SUL S/A EM RECUPERACAO JUDICIAL', '07.699.082/0001-53', 200),
+    ]);
+    expect(r.totalClientes).toBe(1);
+    expect(r.totalLicencas).toBe(200);
+    expect(r.clientes[0].negocios).toBe(1);
   });
 
   it('une o mesmo CNPJ mesmo com o nome grafado diferente', () => {

@@ -15,8 +15,15 @@ function classify(tags: Set<string>): SetupStatus {
 export function aggregateBaseInstalada(deals: RawDeal[]): BaseInstalada {
   // Agrupa por IDENTIDADE (CNPJ, com fallback para nome normalizado), não pelo rótulo.
   // Antes agrupava pelo nome cru: o mesmo cliente com o nome grafado de dois jeitos virava
-  // dois clientes. Mais de um negócio para a mesma empresa é NORMAL (medido: Estaleiro com
-  // duas vendas reais de 200 endpoints) — some as licenças, conta 1 cliente, `negocios` 2.
+  // dois clientes. Mais de um negócio para a mesma empresa é NORMAL — some as licenças,
+  // conta 1 cliente, `negocios` 2. Exemplo real: AMGS, com dois negócios distintos
+  // (105 licenças e 10 licenças, valores diferentes).
+  //
+  // CORRIGIDO em 03/08: este comentário citava o Estaleiro Atlântico Sul como "duas vendas
+  // reais de 200 endpoints". Era falso — o segundo registro (R$ 7.540) NÃO era venda: era o
+  // custo da SecuriSoft (NF 106885), criado em duplicidade pela esteira de onboarding, que
+  // leu os dois e-mails de faturamento do mesmo negócio. Foi deletado no Zoho e removido da
+  // aba/Neon. Contar 400 licenças ali era contar o mesmo contrato duas vezes.
   const byIdent = new Map<string, BaseInstaladaCliente>();
   const tagsByIdent = new Map<string, Set<string>>();
   for (const d of deals) {
