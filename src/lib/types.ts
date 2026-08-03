@@ -69,6 +69,11 @@ export interface RawDeal {
   // na coluna N da aba. O mesmo nó ganhou paginação (até 10 páginas) — antes trazia só
   // os 200 deals mais recentes, o que deixava a base instalada incompleta.
   licencas?: number | string;
+  // `cnpj` exportado em 2026-08-01 (feature-cnpj-identidade-empresa): o nó `Zoho Deals`
+  // busca `CNPJ,CNPJ1` e o `Format Deals Raw` emite o primeiro que passa no dígito
+  // verificador — o campo do Zoho é texto livre e aceita palavra ("Localizando").
+  // É a identidade de empresa; `empresa` (de `Account_Name`) está vazia em 100% dos deals.
+  cnpj?: string;
   // FOOTGUN (feature-016 eval): estas TRÊS colunas abaixo continuam NÃO exportadas pela
   // aba `deals`. Compilam mas leem undefined → métricas que dependem delas
   // (computeComissaoOwnerCanal, computeRenovacoesVencidas) silenciosamente dão vazio/0.
@@ -85,6 +90,8 @@ export type SetupStatus = 'na-console' | 'em-setup' | 'recusou' | 'nao-iniciado'
 
 export interface BaseInstaladaCliente {
   empresa: string;
+  /** CNPJ formatado quando o deal traz um válido. É ele que define a identidade do cliente. */
+  cnpj?: string;
   licencas: number;
   negocios: number;
   setup: SetupStatus;

@@ -78,10 +78,22 @@ export function weekElapsed(p: BrtParts): number {
   return (mow - RAMP_START) / (RAMP_END - RAMP_START);
 }
 
+/**
+ * Data de atribuição de um ganho. 13 dos 78 deals ganhos (R$ 78.186,59) NÃO têm
+ * `closing_date` preenchido no Zoho — medido em 01/08/2026. Sem fallback essa receita não
+ * caía em nenhuma semana nem mês do Farol, enquanto `metrics.ts` a contava normalmente pelo
+ * `modified_time` em 14 pontos. O Farol era o único lugar que descartava.
+ * Efeito aceito: um ganho sem data de fechamento é atribuído à semana da última modificação,
+ * e migra de semana se o deal for editado — mesmo comportamento do resto do dashboard.
+ */
+export function dataAtribuicao(d: RawDeal): string {
+  return String(d.closing_date || d.modified_time || '').slice(0, 10);
+}
+
 export function sumWon(deals: RawDeal[], start: string, end: string): number {
   let s = 0;
   for (const d of deals) {
-    if (isWon(d.stage) && dateInRange(d.closing_date, start, end)) {
+    if (isWon(d.stage) && dateInRange(dataAtribuicao(d), start, end)) {
       s += Number(d.valor) || 0;
     }
   }
@@ -122,7 +134,7 @@ export function computeFarol(deals: RawDeal[], now: Date): Farol {
   let revenueMonth = 0;
   for (const d of deals) {
     if (!isWon(d.stage)) continue;
-    const cd = String(d.closing_date ?? '').slice(0, 10);
+    const cd = dataAtribuicao(d);
     if (!DATE_RE.test(cd)) continue;
     if (mondayOf(cd).slice(0, 7) === ym) revenueMonth += Number(d.valor) || 0;
   }

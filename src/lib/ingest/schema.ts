@@ -12,6 +12,7 @@
 // e é zero; null = NÃO capturado) — por isso lá os escalares usam os coercers *Nulo.
 
 import { nomeNorm, splitTags } from './normalize';
+import { cnpjValido, somenteDigitos } from '../cnpj';
 
 export const TABELAS = [
   'deals',
@@ -159,6 +160,20 @@ const json: Coercer = (v) => {
   }
 };
 
+/**
+ * CNPJ (feature-cnpj-identidade-empresa). Guarda só os 14 dígitos — a máscara é
+ * apresentação. O `Format Deals Raw` já entrega vazio quando nenhum dos dois campos do
+ * Zoho passa no dígito verificador, então CNPJ inválido chegando aqui é bug upstream:
+ * REJEITA e reporta, não guarda torto (mesma regra de `valor: 'R$ 12,5'`).
+ */
+const cnpj: Coercer = (v) => {
+  const r = texto(v);
+  if (!r.ok || r.v === null) return r;
+  const digitos = somenteDigitos(r.v);
+  if (!cnpjValido(digitos)) return nok('CNPJ inválido (dígito verificador)');
+  return ok(digitos);
+};
+
 const CATEGORIAS = ['direto', 'parceiro', 'securisoft'];
 
 const categoria: Coercer = (v) => {
@@ -195,6 +210,7 @@ const DEFS: Record<Tabela, DefTabela> = {
     campos: [
       ['id', 'id', obrig(texto)],
       ['nome', 'nome', obrig(texto)],
+      ['cnpj', 'cnpj', cnpj],
       ['stage', 'stage', obrig(texto)],
       ['valor', 'valor', numero],
       ['lead_source', 'lead_source', texto],

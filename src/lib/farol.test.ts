@@ -133,3 +133,47 @@ describe('computeFarol — metadados', () => {
     expect(f.generatedAt).toBe(now.toISOString());
   });
 });
+
+// --- feature-cnpj-identidade-empresa: ganho sem closing_date ---
+
+describe('computeFarol — ganho sem closing_date', () => {
+  // 13 dos 78 ganhos (R$ 78.186,59) não têm closing_date no Zoho. Antes o Farol descartava
+  // essa receita de todas as semanas e meses, enquanto metrics.ts a contava. Agora cai no
+  // modified_time, igual ao resto do dashboard.
+  const semFechamento = (valor: number, modified_time: string): RawDeal => ({
+    stage: 'Fechado Ganho',
+    valor,
+    closing_date: '',
+    modified_time,
+  });
+
+  it('entra na semana pela data de modificação', () => {
+    const now = new Date('2026-07-15T15:00:00Z'); // Qua 12:00 BRT, semana de 13/07
+    const f = computeFarol([semFechamento(1736, '2026-07-15')], now);
+    expect(f.semana.revenue).toBe(1736);
+  });
+
+  it('entra no mês pela data de modificação', () => {
+    const now = new Date('2026-07-15T15:00:00Z');
+    const f = computeFarol([semFechamento(1736, '2026-07-15')], now);
+    expect(f.mes.revenue).toBe(1736);
+  });
+
+  it('closing_date continua tendo precedência sobre modified_time', () => {
+    const now = new Date('2026-07-15T15:00:00Z');
+    const d: RawDeal = {
+      stage: 'Fechado Ganho',
+      valor: 500,
+      closing_date: '2026-07-15',
+      modified_time: '2026-08-20', // fora da semana; não pode vencer
+    };
+    expect(computeFarol([d], now).semana.revenue).toBe(500);
+  });
+
+  it('sem nenhuma das duas datas continua fora', () => {
+    const now = new Date('2026-07-15T15:00:00Z');
+    const f = computeFarol([{ stage: 'Fechado Ganho', valor: 999 }], now);
+    expect(f.semana.revenue).toBe(0);
+    expect(f.mes.revenue).toBe(0);
+  });
+});

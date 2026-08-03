@@ -47,3 +47,54 @@ describe('setup status', () => {
     expect(r.clientes[0].setup).toBe('recusou');
   });
 });
+
+// --- feature-cnpj-identidade-empresa ---
+
+const wonCnpj = (nome: string, cnpj: string, licencas: number): RawDeal => ({
+  stage: 'Fechado Ganho',
+  nome,
+  cnpj,
+  licencas,
+});
+
+describe('identidade por CNPJ', () => {
+  it('caso Estaleiro: duas vendas reais viram 1 cliente com as licenças somadas', () => {
+    // Medido no Zoho em 01/08/2026: dois deals ganhos, mesmo CNPJ, 200 endpoints cada.
+    // NÃO é duplicata — foram duas vendas (confirmado). 1 cliente, 400 licenças, 2 negócios.
+    const r = aggregateBaseInstalada([
+      wonCnpj('ESTALEIRO ATLANTICO SUL S/A EM RECUPERACAO JUDICIAL', '07.699.082/0001-53', 200),
+      wonCnpj('ESTALEIRO ATLANTICO SUL', '07699082000153', 200),
+    ]);
+    expect(r.totalClientes).toBe(1);
+    expect(r.totalLicencas).toBe(400);
+    expect(r.clientes[0].negocios).toBe(2);
+    expect(r.clientes[0].cnpj).toBe('07.699.082/0001-53');
+  });
+
+  it('une o mesmo CNPJ mesmo com o nome grafado diferente', () => {
+    const r = aggregateBaseInstalada([
+      wonCnpj('SEICOM - INDÚSTRIA, COMÉRCIO E SERVIÇOS ESPECIALIZADOS LTDA', '10.843.079/0001-76', 7),
+      wonCnpj('Seicom Materiais', '10843079000176', 3),
+    ]);
+    expect(r.totalClientes).toBe(1);
+    expect(r.totalLicencas).toBe(10);
+  });
+
+  it('não une empresas diferentes que só parecem parecidas', () => {
+    const r = aggregateBaseInstalada([
+      wonCnpj('AMGS COMERCIO E REPRESENTACOES', '20.858.411/0001-20', 105),
+      wonCnpj('AMGS Engenharia', '10.843.079/0001-76', 10),
+    ]);
+    expect(r.totalClientes).toBe(2);
+  });
+
+  it('sem CNPJ válido cai no nome normalizado e ainda agrupa', () => {
+    const r = aggregateBaseInstalada([
+      { stage: 'Fechado Ganho', nome: 'Consórcio Triângulo LTDA', licencas: 5 },
+      { stage: 'Fechado Ganho', nome: 'CONSORCIO TRIANGULO', cnpj: 'Localizando', licencas: 5 },
+    ]);
+    expect(r.totalClientes).toBe(1);
+    expect(r.totalLicencas).toBe(10);
+    expect(r.clientes[0].cnpj).toBeUndefined();
+  });
+});

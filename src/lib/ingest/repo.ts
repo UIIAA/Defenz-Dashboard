@@ -77,6 +77,7 @@ const DEFS: Record<Tabela, DefSQL> = {
     colunas: [
       txt('id'),
       txt('nome'),
+      txt('cnpj'),
       txt('stage'),
       { campo: 'valor', tipo: 'numeric' },
       txt('lead_source'),
