@@ -67,12 +67,14 @@ const STATUS_BAR: Record<FarolCor, string> = {
   verde: 'bg-emerald-500',
   amarelo: 'bg-amber-500',
   vermelho: 'bg-red-500',
+  neutro: 'bg-slate-300',   // sem meta definida no período — dado, não status
 };
 
 const STATUS_TEXT: Record<FarolCor, string> = {
   verde: 'text-emerald-700',
   amarelo: 'text-amber-700',
   vermelho: 'text-red-700',
+  neutro: 'text-slate-500',
 };
 
 // Barra de atingimento (meta <= 0 → some, per spec §1: meta não definida esconde

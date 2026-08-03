@@ -423,3 +423,94 @@ describe('computeMetas — modo intervalo (range de semanas)', () => {
     expect(semanas[0].weekEnd).toBe('2026-07-19');
   });
 });
+
+// ─── feature-metas-periodo-calendario ────────────────────────────────────────────
+// O filtro 01–31/07 significava 29/06–02/08 (semanas ISO inteiras). Agora a semana é
+// RECORTADA ao intervalo e a meta escala por dia útil dentro do recorte.
+
+describe('período de calendário puro', () => {
+  const ganho = (valor: number, closing_date: string): RawDeal => ({
+    stage: 'Fechado Ganho', valor, closing_date, lead_source: 'Cold Call ( Prospecção )',
+  });
+  // 2026-08-03 é uma segunda; usar um "now" posterior ao range evita a rampa da semana atual.
+  const NOW = new Date('2026-08-10T15:00:00Z');
+  const julho = { from: '2026-07-01', to: '2026-07-31' };
+
+  it('deal em 30/06 NÃO conta quando o período começa em 01/07', () => {
+    const r = computeMetas([ganho(5000, '2026-06-30')], [], NOW, 8, julho);
+    expect(r.consolidado.revenue).toBe(0);
+  });
+
+  it('deal em 01/08 NÃO conta quando o período termina em 31/07', () => {
+    const r = computeMetas([ganho(5000, '2026-08-01')], [], NOW, 8, julho);
+    expect(r.consolidado.revenue).toBe(0);
+  });
+
+  it('deal dentro do intervalo conta', () => {
+    const r = computeMetas([ganho(5000, '2026-07-15')], [], NOW, 8, julho);
+    expect(r.consolidado.revenue).toBe(5000);
+  });
+
+  it('meta de julho é R$ 27.600 exato — 23 dias úteis, sem float', () => {
+    // 3 + 5 + 5 + 5 + 5 = 23 dias úteis. (23/5)*6000 daria 27599.999...; somar por semana não.
+    const r = computeMetas([], [], NOW, 8, julho);
+    expect(r.consolidado.goal).toBe(27600);
+    expect(r.consolidado.nWeeks).toBe(5);
+  });
+
+  it('a primeira e a última semana de julho ficam marcadas como parciais', () => {
+    const r = computeMetas([], [], NOW, 8, julho);
+    const ordenadas = [...r.semanas].reverse(); // vem mais-recente-primeiro
+    expect(ordenadas[0].weekStart).toBe('2026-07-01');
+    expect(ordenadas[0].parcial).toBe(true);
+    expect(ordenadas[0].diasUteis).toBe(3);
+    expect(ordenadas[0].goal).toBe(3600);
+    expect(ordenadas[ordenadas.length - 1].weekEnd).toBe('2026-07-31');
+    expect(ordenadas[ordenadas.length - 1].parcial).toBe(true);
+    expect(ordenadas[2].parcial).toBe(false);
+    expect(ordenadas[2].goal).toBe(6000);
+  });
+
+  it('intervalo invertido devolve o mesmo que o normalizado', () => {
+    const a = computeMetas([ganho(5000, '2026-07-15')], [], NOW, 8, julho);
+    const b = computeMetas([ganho(5000, '2026-07-15')], [], NOW, 8, { from: '2026-07-31', to: '2026-07-01' });
+    expect(b.consolidado.revenue).toBe(a.consolidado.revenue);
+    expect(b.consolidado.goal).toBe(a.consolidado.goal);
+  });
+
+  it('período Sáb–Dom: meta 0, sem NaN, e NÃO pinta verde', () => {
+    // 04-05/07/2026 é sábado e domingo → nenhum dia útil.
+    const r = computeMetas([], [], NOW, 8, { from: '2026-07-04', to: '2026-07-05' });
+    expect(r.consolidado.goal).toBe(0);
+    expect(Number.isNaN(r.consolidado.pctAbs)).toBe(false);
+    expect(r.consolidado.pctAbs).toBe(0);
+    expect(r.consolidado.cor).not.toBe('verde');
+    expect(r.consolidado.cor).toBe('neutro');
+    expect(r.consolidado.label).toBe('sem meta');
+  });
+
+  it('semana parcial não gera delta nem diagnóstico causal', () => {
+    const r = computeMetas([], [], NOW, 8, julho);
+    const ordenadas = [...r.semanas].reverse();
+    // a 2ª semana (inteira) tem como anterior a 1ª (parcial) → delta suprimido
+    expect(ordenadas[1].parcial).toBe(false);
+    expect(ordenadas[1].delta.ligacoes).toBeNull();
+    expect(ordenadas[1].diagnostico).toContain('sem semana anterior');
+  });
+
+  it('1 clique (from === to) continua rendendo a semana ISO inteira', () => {
+    // regressão: rangeSel colapsa from===to em {kind:'dia'} e a UI promete "1 clique = 1 semana"
+    const r = computeMetas([ganho(5000, '2026-07-13')], [], NOW, 8, { from: '2026-07-15', to: '2026-07-15' });
+    expect(r.semanas[0].weekStart).toBe('2026-07-13');
+    expect(r.semanas[0].weekEnd).toBe('2026-07-19');
+    expect(r.semanas[0].goal).toBe(6000);
+    expect(r.semanas[0].parcial).toBe(false);
+    expect(r.consolidado.revenue).toBe(5000);
+  });
+
+  it('sem range, a semana inteira mantém meta de R$ 6.000', () => {
+    const r = computeMetas([], [], NOW, 2);
+    expect(r.semanas[1].goal).toBe(6000);
+    expect(r.semanas[1].parcial).toBe(false);
+  });
+});

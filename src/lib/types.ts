@@ -725,8 +725,11 @@ export interface ResumoDiarioResponse {
 }
 
 // ─── Farol de Metas (feature-farol-metas, Fase 1) ────────────────────────────
-export type FarolCor = 'verde' | 'amarelo' | 'vermelho';
-export type FarolLabel = 'batido' | 'no ritmo' | 'atrás' | 'fora do ritmo';
+// `neutro`/`sem meta` (feature-metas-periodo-calendario): recorte de período sem nenhum
+// dia útil (ex.: Sáb–Dom) tem meta ZERO. Sem isso, `grade` cairia em `revenue >= expected`
+// com expected 0 e pintaria VERDE "no ritmo" ao lado de "0% da meta".
+export type FarolCor = 'verde' | 'amarelo' | 'vermelho' | 'neutro';
+export type FarolLabel = 'batido' | 'no ritmo' | 'atrás' | 'fora do ritmo' | 'sem meta';
 
 export interface FarolBucket {
   revenue: number;   // receita ganha na janela (Σ valor dos deals ganhos)
@@ -765,8 +768,15 @@ export interface WeekDelta {
 }
 
 export interface WeekMetric {
-  weekStart: string; // YYYY-MM-DD (segunda)
-  weekEnd: string;   // YYYY-MM-DD (domingo)
+  // feature-metas-periodo-calendario: estas são as bordas RECORTADAS ao intervalo
+  // selecionado, não a segunda/domingo ISO. Com o filtro 01–31/07 a primeira semana
+  // começa em 01/07 (quarta) e a última termina em 31/07 (sexta).
+  weekStart: string; // YYYY-MM-DD
+  weekEnd: string;   // YYYY-MM-DD
+  /** true quando a semana ISO foi cortada pelo intervalo (semana parcial). */
+  parcial: boolean;
+  /** dias Seg–Sex dentro do recorte (0..5). É o que escala a meta. */
+  diasUteis: number;
   // feature-metas-fonte-receita: `revenue` passou a significar SÓ a receita
   // "Venda Defenz" (fonteVenda === 'defenz') — é o que alimenta a meta/pctAbs/
   // cor/label/diagnóstico. `revenueRepasse` é a receita "Repasse SS" (informativa,
@@ -775,8 +785,8 @@ export interface WeekMetric {
   revenue: number;
   revenueRepasse: number;
   revenueTotal: number;
-  goal: number;      // GOAL_WEEK (R$ 6.000)
-  pctAbs: number;     // revenue / goal
+  goal: number;      // GOAL_WEEK × (diasUteis / 5) — R$ 6.000 numa semana inteira
+  pctAbs: number;     // revenue / goal (0 quando goal é 0)
   cor: FarolCor;
   label: FarolLabel;
   esforco: WeekEsforco;

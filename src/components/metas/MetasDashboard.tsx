@@ -27,6 +27,9 @@ const COR: Record<FarolCor, { dot: string; bar: string; text: string; ring: stri
   verde: { dot: 'bg-emerald-500', bar: 'bg-emerald-500', text: 'text-emerald-700', ring: 'ring-emerald-500/20', bg: 'bg-emerald-50' },
   amarelo: { dot: 'bg-amber-500', bar: 'bg-amber-500', text: 'text-amber-700', ring: 'ring-amber-500/20', bg: 'bg-amber-50' },
   vermelho: { dot: 'bg-red-500', bar: 'bg-red-500', text: 'text-red-600', ring: 'ring-red-500/20', bg: 'bg-red-50' },
+  // `neutro` = recorte de período sem dia útil → não há meta, logo não há status.
+  // Cinza de propósito: dado é neutro; verde/âmbar/vermelho são status.
+  neutro: { dot: 'bg-slate-300', bar: 'bg-slate-300', text: 'text-slate-500', ring: 'ring-slate-400/20', bg: 'bg-slate-50' },
 };
 
 const ESFORCO_ITEMS: { key: keyof WeekMetric['esforco']; label: string }[] = [
@@ -243,15 +246,19 @@ interface ChartRow {
   receitaTotal: number;
   meta: number;
   esforcoTotal: number;
+  parcial: boolean;
+  emCurso: boolean;
 }
 
-function buildChartData(semanas: WeekMetric[]): ChartRow[] {
+function buildChartData(semanas: WeekMetric[], hoje: string): ChartRow[] {
   return [...semanas].reverse().map(w => ({
     label: weekLabel(w),
     receitaDefenz: w.revenue,
     receitaRepasse: w.revenueRepasse,
     receitaTotal: w.revenueTotal,
     meta: w.goal,
+    parcial: w.parcial,
+    emCurso: hoje >= w.weekStart && hoje <= w.weekEnd,
     esforcoTotal:
       w.esforco.ligacoes + w.esforco.emails + w.esforco.apresentacoes + w.esforco.propostas + w.esforco.reunioes,
   }));
@@ -284,16 +291,19 @@ function ReceitaMetaChart({ data, isInterval }: { data: ChartRow[]; isInterval: 
           <YAxis domain={[0, (max: number) => Math.max(max, 8000)]} tickFormatter={tickK} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
           <ReTooltip content={ReceitaTooltip} />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-          <Line type="monotone" dataKey="meta" name="Meta (R$6k)" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
+          <Line type="monotone" dataKey="meta" name="Meta da semana" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
           <Bar dataKey="receitaDefenz" name="Venda Defenz" minPointSize={3} maxBarSize={48} radius={[4, 4, 0, 0]}>
             <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#64748b' }} />
-            {data.map((row, i) => (
-              <Cell key={row.label} fill={barColor(row.receitaDefenz, row.meta)} fillOpacity={i === data.length - 1 ? 0.45 : 1} />
+            {data.map((row) => (
+              <Cell key={row.label} fill={barColor(row.receitaDefenz, row.meta)} fillOpacity={row.emCurso ? 0.45 : 1} />
             ))}
           </Bar>
         </ComposedChart>
       </ResponsiveContainer>
-      <p className="mt-2 text-[11px] text-slate-400">última barra = semana em curso</p>
+      <p className="mt-2 text-[11px] text-slate-400">
+        {data.some(d => d.emCurso) ? 'barra clara = semana em curso · ' : ''}
+        {data.some(d => d.parcial) ? 'semana parcial = recortada pelo período (meta proporcional)' : 'meta de R$ 6.000 por semana inteira'}
+      </p>
     </div>
   );
 }
@@ -449,9 +459,16 @@ export const MetasDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const query = sel
-    ? (sel.kind === 'dia' ? `from=${sel.data}&to=${sel.data}` : `from=${sel.from}&to=${sel.to}`)
-    : '';
+  // Default (`sel === null`, rotulado "Últimas 8 semanas") emite EXATAMENTE o mesmo range
+  // do preset "8 sem". Antes o default caía no caminho sem range (8 semanas ISO inteiras) e
+  // o preset recortava a semana em curso em `to=today`: os dois botões cobriam as mesmas 8
+  // semanas e, com meta proporcional, passariam a mostrar metas diferentes.
+  const query = useMemo(() => {
+    const efetivo = sel ?? presetRange('8sem', today);
+    return efetivo.kind === 'dia'
+      ? `from=${efetivo.data}&to=${efetivo.data}`
+      : `from=${efetivo.from}&to=${efetivo.to}`;
+  }, [sel, today]);
 
   const fetchData = useCallback(async (q: string) => {
     setLoading(true);
@@ -474,7 +491,8 @@ export const MetasDashboard = () => {
   const isInterval = !!response?.periodo;
   // "Bati/não bati" (modo padrão) → última semana FECHADA (semanas[1]); semanas[0] é a atual em andamento.
   const retro = semanas.length > 1 ? semanas[1] : semanas[0];
-  const chartData = useMemo(() => buildChartData(semanas), [semanas]);
+  const hojeISO = useMemo(() => new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10), []);
+  const chartData = useMemo(() => buildChartData(semanas, hojeISO), [semanas, hojeISO]);
 
   const selLabel = !sel
     ? 'Últimas 8 semanas'

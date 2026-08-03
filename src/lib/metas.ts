@@ -8,7 +8,7 @@
 
 import type {
   RawDeal, RawResumoDiario, WeekMetric, WeekEsforco, WeekDelta, MetasConsolidado,
-  EficienciaIndices, EficienciaDelta, MetasEficiencia,
+  EficienciaIndices, EficienciaDelta, MetasEficiencia, FarolCor, FarolLabel,
 } from './types';
 import { GOAL_WEEK, mondayOf, addDays, brtParts, weekElapsed, grade, isoDow, dataAtribuicao } from './farol';
 import { isClosedWon, dateInRange, classifyOrigin } from './metrics';
@@ -101,15 +101,41 @@ const ESFORCO_LABELS: Record<EsforcoField, string> = {
 };
 
 interface WeekRaw {
-  weekStart: string;
-  weekEnd: string;
+  weekStart: string;       // borda RECORTADA ao intervalo (não a segunda ISO)
+  weekEnd: string;         // borda RECORTADA ao intervalo (não o domingo ISO)
   revenue: number;         // Venda Defenz — alimenta meta/pctAbs/cor/label/diagnóstico
   revenueRepasse: number;  // Repasse SS — informativo
   revenueTotal: number;    // defenz + repasse
   defenzCount: number;     // nº de negócios Venda Defenz na semana
   repasseCount: number;    // nº de negócios Repasse SS na semana
-  expected: number;        // esperado pelo pace no instante (semana fechada = GOAL_WEEK)
+  expected: number;        // esperado pelo pace no instante
+  goal: number;            // GOAL_WEEK × (diasUteis / 5) — 0 se o recorte não tem dia útil
+  diasUteis: number;       // dias Seg–Sex dentro do recorte (0..5)
+  parcial: boolean;        // true quando a semana ISO foi cortada pelo intervalo
   esforco: WeekEsforco;
+}
+
+// feature-metas-periodo-calendario: dias Seg–Sex em [ini, fim] (inclusive).
+// A meta escala por dia útil porque é assim que o esforço é contado (Seg–Sex) e é a
+// mesma unidade que o fechamento manual usa ("dias_uteis: 23" em julho/2026).
+export function diasUteisEntre(ini: string, fim: string): number {
+  if (ini > fim) return 0;
+  let n = 0;
+  for (let d = ini; d <= fim; d = addDays(d, 1)) {
+    if (isoDow(d) <= 5) n++; // isoDow: 1=Seg … 7=Dom
+  }
+  return n;
+}
+
+/**
+ * Veredito de uma janela. Envolve `grade` para tratar o caso que ela não prevê:
+ * meta ZERO. Com goal 0 e expected 0, `grade` cai em `revenue >= expected` e devolve
+ * verde "no ritmo" — um período Sáb–Dom apareceria batido ao lado de "0% da meta".
+ * Sem dia útil não há veredito: é neutro.
+ */
+function gradeComMeta(revenue: number, goal: number, expected: number): { cor: FarolCor; label: FarolLabel } {
+  if (goal <= 0) return { cor: 'neutro', label: 'sem meta' };
+  return grade(revenue, goal, expected);
 }
 
 function computeDelta(cur: WeekRaw, prev: WeekRaw | undefined): WeekDelta {
@@ -193,7 +219,10 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
   const dealsDefenz = raw.reduce((s, w) => s + w.defenzCount, 0);
   const dealsRepasse = raw.reduce((s, w) => s + w.repasseCount, 0);
   const expected = raw.reduce((s, w) => s + w.expected, 0);
-  const goal = GOAL_WEEK * nWeeks;
+  // Σ das metas semanais, NÃO GOAL_WEEK × nWeeks nem (diasUteis/5) × GOAL_WEEK agregado:
+  // com semanas recortadas a primeira forma superestima, e a segunda dá 27.599,999… em
+  // float para julho. Somando por semana (3.600 + 6.000×4) dá 27.600 exato.
+  const goal = raw.reduce((s, w) => s + w.goal, 0);
   // raw é mais-recente-primeiro: a mais antiga é a última, a mais recente é a primeira.
   const oldest = raw[raw.length - 1];
   const newest = raw[0];
@@ -209,7 +238,7 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
     goal,
     pctAbs: goal > 0 ? revenue / goal : 0,
     esforco,
-    ...grade(revenue, goal, expected),
+    ...gradeComMeta(revenue, goal, expected),
   };
 }
 
@@ -255,48 +284,87 @@ export function computeMetas(
   const currentWeekStart = mondayOf(p.date);
   const elapsedCurrent = weekElapsed(p);
 
+  // feature-metas-periodo-calendario: o intervalo recorta a semana. Duas normalizações
+  // ANTES de qualquer conta:
+  //  · from > to  → ordena. `weekStartsFor` já normaliza, mas a interseção usaria os
+  //    valores crus e devolveria zeros em silêncio (a rota valida só o formato).
+  //  · from === to → expande para a semana ISO inteira. O calendário colapsa isso em
+  //    `{kind:'dia'}` (date-range.ts) e a UI promete "1 clique = 1 semana"; sem esta
+  //    linha, clicar numa quarta viraria uma janela de 1 dia com meta de R$ 1.200.
+  const corte = (() => {
+    if (!range) return null;
+    const a = range.from <= range.to ? range.from : range.to;
+    const b = range.from <= range.to ? range.to : range.from;
+    if (a === b) return { from: mondayOf(a), to: addDays(mondayOf(a), 6) };
+    return { from: a, to: b };
+  })();
+
   const raw: WeekRaw[] = weekStartsFor(currentWeekStart, nWeeks, range).map(weekStart => {
-    const weekEnd = addDays(weekStart, 6);
-    const rev = weekRevenue(deals, weekStart, weekEnd);
-    // Semana encerrada: 100% do pace → expected = goal. Semana em andamento: pace real
-    // (rampa Seg 08h→Sex 23:59 do Farol). Semana futura (só em modo range): 0.
+    const isoStart = weekStart;
+    const isoEnd = addDays(weekStart, 6);
+    // Interseção da semana ISO com o intervalo pedido.
+    const ini = corte && corte.from > isoStart ? corte.from : isoStart;
+    const fim = corte && corte.to < isoEnd ? corte.to : isoEnd;
+    const parcial = ini !== isoStart || fim !== isoEnd;
+
+    const rev = weekRevenue(deals, ini, fim);
+    const diasUteis = diasUteisEntre(ini, fim);
+    const goal = GOAL_WEEK * (diasUteis / 5);
+
+    // Pace. Semana encerrada: 100% → expected = goal. Semana futura: 0.
+    // Semana em andamento: a rampa Seg 08h→Sex 23:59 do Farol — MAS só quando a semana
+    // NÃO foi cortada à direita. Se o recorte já termina antes do fim da semana, ele
+    // próprio representa o tempo decorrido; aplicar os dois fatores descontaria o mesmo
+    // tempo duas vezes (numa segunda 10h daria ~R$ 22 de expectativa contra meta de
+    // R$ 1.200, e qualquer venda pintaria verde).
+    const cortadaADireita = fim < isoEnd;
     const expected =
-      weekStart < currentWeekStart ? GOAL_WEEK :
-      weekStart === currentWeekStart ? GOAL_WEEK * elapsedCurrent :
+      weekStart < currentWeekStart ? goal :
+      weekStart === currentWeekStart ? (cortadaADireita ? goal : goal * elapsedCurrent) :
       0;
+
     return {
-      weekStart,
-      weekEnd,
+      weekStart: ini,
+      weekEnd: fim,
       revenue: rev.defenz,
       revenueRepasse: rev.repasse,
       revenueTotal: rev.defenz + rev.repasse,
       defenzCount: rev.defenzCount,
       repasseCount: rev.repasseCount,
       expected,
-      esforco: weeklyEsforco(resumoRows, weekStart, weekEnd),
+      goal,
+      diasUteis,
+      parcial,
+      esforco: weeklyEsforco(resumoRows, ini, fim),
     };
   });
 
   const semanas: WeekMetric[] = raw.map((cur, i) => {
     const prev = raw[i + 1];
-    const { cor, label } = grade(cur.revenue, GOAL_WEEK, cur.expected);
-    const pctAbs = cur.revenue / GOAL_WEEK;
-    const delta = computeDelta(cur, prev);
+    const { cor, label } = gradeComMeta(cur.revenue, cur.goal, cur.expected);
+    const pctAbs = cur.goal > 0 ? cur.revenue / cur.goal : 0;
+    // Delta e diagnóstico ficam MUDOS quando uma das duas semanas é parcial: comparar um
+    // recorte de 3 dias úteis com uma semana de 5 faz todo o esforço "subir ~67%" por
+    // artefato, e `diagnosticar` transforma isso em afirmação causal na tela.
+    const comparavel = !!prev && !cur.parcial && !prev.parcial;
+    const delta = comparavel ? computeDelta(cur, prev) : computeDelta(cur, undefined);
     const batido = pctAbs >= 1;
 
     return {
       weekStart: cur.weekStart,
       weekEnd: cur.weekEnd,
+      parcial: cur.parcial,
+      diasUteis: cur.diasUteis,
       revenue: cur.revenue,
       revenueRepasse: cur.revenueRepasse,
       revenueTotal: cur.revenueTotal,
-      goal: GOAL_WEEK,
+      goal: cur.goal,
       pctAbs,
       cor,
       label,
       esforco: cur.esforco,
       delta,
-      diagnostico: diagnosticar(delta, batido, !!prev),
+      diagnostico: diagnosticar(delta, batido, comparavel),
     };
   });
 
