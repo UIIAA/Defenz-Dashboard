@@ -46,16 +46,16 @@ function weekLabel(w: WeekMetric): string {
 
 function DeltaBadge({ v, label }: { v: number | null; label?: string }) {
   if (v === null) {
-    return <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">{label ? `${label} —` : '—'}</span>;
+    return <span className="inline-flex items-center gap-1 text-xs text-slate-500">{label ? `${label} —` : '—'}</span>;
   }
   const flat = v === 0;
   const up = v > 0;
   const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
   // Queda de esforço = atenção, não incêndio — âmbar, nunca vermelho (§Padrões).
-  const cls = flat ? 'text-slate-400' : up ? 'text-emerald-700' : 'text-amber-700';
+  const cls = flat ? 'text-slate-500' : up ? 'text-emerald-700' : 'text-amber-700';
   const txt = `${up && !flat ? '+' : ''}${Math.round(v * 100)}%`;
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${cls}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${cls}`}>
       <Icon size={12} strokeWidth={2.5} />
       {label ? `${label} ${txt}` : txt}
     </span>
@@ -81,10 +81,10 @@ function FarolBucketCard({ icon: Icon, title, b, direcionadoSS }: { icon: typeof
       </div>
       <div className="flex items-baseline gap-2">
         <span className="text-2xl lg:text-3xl font-semibold tracking-tight text-slate-900 font-display tabular-nums">{brl(b.revenue)}</span>
-        <span className="text-sm text-slate-400 tabular-nums">/ {brl(b.goal)}</span>
+        <span className="text-sm text-slate-500 tabular-nums">/ {brl(b.goal)}</span>
       </div>
       {direcionadoSS > 0 && (
-        <p className="mt-0.5 text-[11px] text-slate-400">+ <span className="font-medium text-slate-500 tabular-nums">{brl(direcionadoSS)}</span> direcionado SS (fora da meta)</p>
+        <p className="mt-0.5 text-xs text-slate-500">+ <span className="font-medium text-slate-500 tabular-nums">{brl(direcionadoSS)}</span> direcionado SS (fora da meta)</p>
       )}
       <div className="relative mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
         <motion.div
@@ -101,7 +101,7 @@ function FarolBucketCard({ icon: Icon, title, b, direcionadoSS }: { icon: typeof
       </div>
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className={`font-bold tabular-nums ${c.text}`}>{pct(b.pctAbs)} da meta</span>
-        <span className="text-slate-400 tabular-nums">esperado {brl(b.expected)}</span>
+        <span className="text-slate-500 tabular-nums">esperado {brl(b.expected)}</span>
       </div>
     </div>
   );
@@ -121,7 +121,7 @@ function FarolMetas({ res }: { res: MetasResponse }) {
         <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">
           {fechado ? 'Farol — como o período fechou' : 'Farol — onde estou agora'}
         </h2>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-xs text-slate-500">
           meta R$ 6.000 por semana cheia · {fechado && ate ? `posição em ${ate}` : 'ao vivo'}
         </span>
       </div>
@@ -140,19 +140,19 @@ function FaturamentoCompletoCard({ c }: { c: MetasConsolidado }) {
       <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Venda ganha no período · {c.nWeeks} semana{c.nWeeks === 1 ? '' : 's'}</h2>
       <div className="flex flex-wrap items-end gap-6">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Venda direta Defenz</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Venda direta Defenz</p>
           <p className="text-2xl font-semibold text-slate-700 tabular-nums">{brl(c.revenue)}</p>
-          <p className="text-xs text-slate-400">{c.dealsDefenz} venda{c.dealsDefenz === 1 ? '' : 's'}{c.dealsDefenz ? ` · ticket ${brl(Math.round(c.revenue / c.dealsDefenz))}` : ''}</p>
+          <p className="text-xs text-slate-500">{c.dealsDefenz} venda{c.dealsDefenz === 1 ? '' : 's'}{c.dealsDefenz ? ` · ticket ${brl(Math.round(c.revenue / c.dealsDefenz))}` : ''}</p>
         </div>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Direcionado SS</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Direcionado SS</p>
           <p className="text-2xl font-semibold text-slate-500 tabular-nums">{brl(c.revenueDirecionadoSS)}</p>
-          <p className="text-xs text-slate-400">{c.dealsDirecionadoSS} negócio{c.dealsDirecionadoSS === 1 ? '' : 's'}</p>
+          <p className="text-xs text-slate-500">{c.dealsDirecionadoSS} negócio{c.dealsDirecionadoSS === 1 ? '' : 's'}</p>
         </div>
         <div className="border-l border-slate-200 pl-6">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Total</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Total</p>
           <p className="text-4xl font-semibold text-slate-900 tabular-nums">{brl(c.revenueTotal)}</p>
-          <p className="text-xs text-slate-400">venda ganha no período</p>
+          <p className="text-xs text-slate-500">venda ganha no período</p>
         </div>
       </div>
     </div>
@@ -168,7 +168,7 @@ function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">Consolidado do período</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{fmt(c.weekStart)}–{fmt(c.weekEnd)} · {c.nWeeks} {c.nWeeks === 1 ? 'semana' : 'semanas'}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{fmt(c.weekStart)}–{fmt(c.weekEnd)} · {c.nWeeks} {c.nWeeks === 1 ? 'semana' : 'semanas'}</p>
         </div>
         <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cor.bg} ${cor.text}`}>
           <span className={`h-2 w-2 rounded-full ${cor.dot}`} />
@@ -188,7 +188,7 @@ function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
         <span className={`font-bold tabular-nums ${cor.text}`}>
           {pct(c.pctAbs)} da meta — {brl(c.revenue)} de {brl(c.goal)}
         </span>
-        <span className="text-slate-400 tabular-nums">
+        <span className="text-slate-500 tabular-nums">
           {c.diasUteis} dia{c.diasUteis === 1 ? '' : 's'} úte{c.diasUteis === 1 ? 'l' : 'is'} · esforço Seg–Sex
         </span>
       </div>
@@ -196,7 +196,7 @@ function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
         {ESFORCO_ITEMS.map(it => (
           <div key={it.key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{it.label}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{it.label}</p>
             <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">{nf(c.esforco[it.key])}</p>
           </div>
         ))}
@@ -212,13 +212,13 @@ function PorqueBloco({ w, isRetro }: { w: WeekMetric; isRetro: boolean }) {
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-bold uppercase tracking-widest text-red-600">Por que bati / não bati</h2>
-        <span className="text-xs text-slate-400">{isRetro ? `semana ${weekLabel(w)} (fechada)` : weekLabel(w)}</span>
+        <span className="text-xs text-slate-500">{isRetro ? `semana ${weekLabel(w)} (fechada)` : weekLabel(w)}</span>
       </div>
       <p className={`text-sm font-medium mb-4 ${c.text}`}>{w.diagnostico}</p>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {ESFORCO_ITEMS.map(it => (
           <div key={it.key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{it.label}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{it.label}</p>
             <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">{nf(w.esforco[it.key])}</p>
             <DeltaBadge v={w.delta[it.key]} />
           </div>
@@ -297,48 +297,65 @@ const tickK = (v: number) => `${v / 1000}k`;
 // o que o gráfico existe para mostrar.
 // Azul (claro = meta, escuro = esforço) nunca é status nesta paleta — verde/âmbar/vermelho
 // seguem reservados para status, e vermelho só para problema real.
-const COR_DEFENZ = '#334155';
-const COR_SS = '#cbd5e1';
+// Venda direta Defenz muda de cor por atingimento: VERDE quando bate ou supera a meta
+// da semana, PRETO quando fica abaixo. Verde segue significando "batido" — mesma
+// semantica do badge — e preto e dado neutro, nao alarme.
+const COR_BATEU = '#059669';
+const COR_ABAIXO = '#0f172a';
+// Direcionado SS num cinza de verdade (slate-400). O slate-300 anterior sumia no fundo
+// branco justamente nas semanas em que ele era o maior numero do grafico.
+const COR_SS = '#94a3b8';
 const COR_META = '#7dd3fc';
 const COR_ESFORCO = '#0284c7';
 
 function ReceitaChart({ data, isInterval }: { data: ChartRow[]; isInterval: boolean }) {
   const temParcial = data.some(d => d.parcial);
   const temEmCurso = data.some(d => d.emCurso);
+  // Densidade: com muitas semanas os rótulos de eixo e os valores no topo das barras se
+  // sobrepõem e viram borrão. Acima de 10 semanas o eixo mostra ~8 marcas e os valores
+  // saem — o número exato continua no tooltip, que é onde se lê valor de qualquer forma.
+  const denso = data.length > 10;
+  const passoEixo = denso ? Math.ceil(data.length / 8) - 1 : 0;
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
       <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-1">
         {isInterval ? `Venda ganha semana a semana (${data.length})` : `Venda ganha — últimas ${data.length} semanas`}
       </h2>
-      <p className="text-[11px] text-slate-500 mb-3">
+      <p className="text-xs text-slate-500 mb-3">
         Barras = venda ganha, separada por origem. <span className="font-medium text-slate-600">A meta vale só para a Venda direta Defenz</span> —
-        o Direcionado SS é informativo e fica fora dela. A linha azul escura é o esforço do período (eixo da direita).
+        o Direcionado SS é informativo e fica fora dela. Barra <span className="font-semibold text-emerald-700">verde</span> = semana bateu a meta;
+        <span className="font-semibold text-slate-900"> preta</span> = ficou abaixo. A linha azul escura é o esforço (eixo da direita).
       </p>
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={data} margin={{ top: 20, right: 8, bottom: 4, left: 0 }}>
-          <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-          <YAxis yAxisId="rev" domain={[0, (max: number) => Math.max(max, 8000)]} tickFormatter={tickK} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false}
-            label={{ value: 'R$', position: 'insideTopLeft', fill: '#64748b', fontSize: 11 }} />
-          <YAxis yAxisId="esf" orientation="right" tick={{ fill: COR_ESFORCO, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false}
-            label={{ value: 'ações', position: 'insideTopRight', fill: COR_ESFORCO, fontSize: 11 }} />
+          <XAxis dataKey="label" tick={{ fill: '#475569', fontSize: 12 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} interval={passoEixo} />
+          <YAxis yAxisId="rev" domain={[0, (max: number) => Math.max(max, 8000)]} tickFormatter={tickK} tick={{ fill: '#475569', fontSize: 12 }} axisLine={false} tickLine={false}
+            label={{ value: 'R$', position: 'insideTopLeft', fill: '#475569', fontSize: 12 }} />
+          <YAxis yAxisId="esf" orientation="right" tick={{ fill: COR_ESFORCO, fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false}
+            label={{ value: 'ações', position: 'insideTopRight', fill: COR_ESFORCO, fontSize: 12 }} />
           <ReTooltip content={ReceitaTooltip} />
-          <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Venda direta Defenz" fill={COR_DEFENZ} minPointSize={3} maxBarSize={38} radius={[4, 4, 0, 0]}>
-            <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#64748b' }} />
+          <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />
+          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Venda direta Defenz" fill={COR_ABAIXO} minPointSize={3} maxBarSize={38} radius={[4, 4, 0, 0]}>
+            {!denso && <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 12, fill: '#334155', fontWeight: 600 }} />}
             {data.map((row) => (
-              <Cell key={row.label} fill={COR_DEFENZ} fillOpacity={row.emCurso ? 0.45 : 1} />
+              <Cell
+                key={row.label}
+                fill={row.meta > 0 && row.receitaDefenz >= row.meta ? COR_BATEU : COR_ABAIXO}
+                fillOpacity={row.emCurso ? 0.5 : 1}
+              />
             ))}
           </Bar>
           <Bar yAxisId="rev" dataKey="receitaDirecionadoSS" name="Direcionado SS" fill={COR_SS} maxBarSize={38} radius={[4, 4, 0, 0]}>
-            <LabelList dataKey="receitaDirecionadoSS" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#94a3b8' }} />
+            {!denso && <LabelList dataKey="receitaDirecionadoSS" position="top" formatter={labelK} style={{ fontSize: 12, fill: '#475569', fontWeight: 600 }} />}
           </Bar>
           <Line yAxisId="rev" type="monotone" dataKey="meta" name="Meta da semana (só Defenz)" stroke={COR_META} strokeWidth={2.5} strokeDasharray="5 4" dot={false} />
           <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço (ações)" stroke={COR_ESFORCO} strokeWidth={2} dot={{ r: 3, fill: '#fff', stroke: COR_ESFORCO, strokeWidth: 2 }} />
         </ComposedChart>
       </ResponsiveContainer>
-      <p className="mt-2 text-[11px] text-slate-400">
+      <p className="mt-2 text-xs text-slate-500">
         {temEmCurso ? 'barra clara = semana em curso · ' : ''}
         {temParcial ? 'semana parcial = recortada pelo período (meta proporcional) · ' : ''}
+        {denso ? 'muitas semanas: valores no topo das barras saem — passe o mouse para ver · ' : ''}
         esforço vende com atraso — compare tendências, não a mesma semana.
       </p>
     </div>
@@ -347,15 +364,15 @@ function ReceitaChart({ data, isInterval }: { data: ChartRow[]; isInterval: bool
 
 function EficienciaDeltaTag({ v }: { v: number | null }) {
   if (v === null) {
-    return <span className="text-[11px] text-slate-400">— amostra pequena</span>;
+    return <span className="text-xs text-slate-500">— amostra pequena</span>;
   }
   const flat = v === 0;
   const up = v > 0;
   const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
-  const cls = flat ? 'text-slate-400' : up ? 'text-emerald-700' : 'text-amber-700';
+  const cls = flat ? 'text-slate-500' : up ? 'text-emerald-700' : 'text-amber-700';
   const txt = `${up && !flat ? '+' : ''}${Math.round(v * 100)}%`;
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${cls}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${cls}`}>
       <Icon size={12} strokeWidth={2.5} />
       {txt}
     </span>
@@ -405,10 +422,10 @@ function EficienciaGrid({ eficiencia, c }: { eficiencia: MetasEficiencia; c: Met
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {items.map(it => (
           <div key={it.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{it.label}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{it.label}</p>
             <p className="text-xl font-semibold text-slate-900 tabular-nums mt-1">{it.value}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">{it.leitura}</p>
-            <p className="text-[11px] text-slate-400">{it.fracao}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{it.leitura}</p>
+            <p className="text-xs text-slate-500">{it.fracao}</p>
             <div className="mt-1"><EficienciaDeltaTag v={it.delta} /></div>
           </div>
         ))}
@@ -550,7 +567,7 @@ export const MetasDashboard = () => {
               }
             />
             {sel && (
-              <button onClick={() => setSel(null)} title="Voltar ao padrão (8 semanas)" className="p-1.5 rounded-full text-slate-400 hover:bg-slate-50 hover:text-red-600 transition-colors">
+              <button onClick={() => setSel(null)} title="Voltar ao padrão (8 semanas)" className="p-1.5 rounded-full text-slate-500 hover:bg-slate-50 hover:text-red-600 transition-colors">
                 <X size={14} />
               </button>
             )}
@@ -569,17 +586,17 @@ export const MetasDashboard = () => {
       ) : loading && !response ? (
         <div className="flex flex-col items-center justify-center py-32">
           <Loader2 size={36} className="animate-spin text-red-500 mb-4" />
-          <p className="text-slate-400 text-sm">Carregando metas...</p>
+          <p className="text-slate-500 text-sm">Carregando metas...</p>
         </div>
       ) : !semanas.length ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Target size={32} className="text-slate-300 mb-3" />
           <p className="text-lg text-slate-600">Sem dados suficientes para calcular as metas</p>
-          <p className="text-sm text-slate-400 mt-2">Verifique se as abas `resumo_diario` e `deals` estão populadas.</p>
+          <p className="text-sm text-slate-500 mt-2">Verifique se as abas `resumo_diario` e `deals` estão populadas.</p>
         </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Aqui a meta conta só a <span className="font-medium text-slate-500">Venda direta Defenz</span>; o Direcionado SS é informativo. A palavra &ldquo;repasse&rdquo; fica reservada para dinheiro que sai para a SecuriSoft — o painel ainda não mostra margem nem custo. O esforço (ligações, e-mails, apresentações, propostas, reuniões) conta de <span className="font-medium text-slate-500">segunda a sexta</span>; a receita segue atribuída à semana inteira (Seg–Dom).
           </p>
 

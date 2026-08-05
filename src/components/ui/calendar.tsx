@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
+// Contraste: a versão anterior usava `text-muted-foreground` + `opacity-50` empilhados.
+// Dois níveis de clareamento sobre um cinza que já é claro deixavam dia desabilitado e dia
+// de fora do mês praticamente invisíveis — o calendário parecia quebrado. Aqui os tons são
+// explícitos, cada estado tem UM nível de cor, e nada usa opacity para escurecer texto.
 function Calendar({
   className,
   classNames,
@@ -16,39 +20,39 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
+      className={cn("relative p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row gap-2",
-        month: "flex flex-col gap-4",
-        month_caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
-        nav: "flex items-center gap-1",
+        months: "flex flex-col sm:flex-row gap-6",
+        month: "flex flex-col gap-3",
+        // A nav era `absolute` DENTRO de cada mês. Com 2 meses lado a lado ela escapava do
+        // card e caía por cima do texto de ajuda do popover. Agora é uma faixa própria,
+        // ancorada no topo do calendário inteiro.
+        nav: "absolute top-3 right-3 z-10 flex items-center gap-1",
         button_previous:
-          "absolute left-1 top-0 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md border border-input bg-transparent p-0 opacity-50 hover:opacity-100 transition-opacity",
+          "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:text-slate-300 disabled:hover:bg-white transition-colors",
         button_next:
-          "absolute right-1 top-0 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md border border-input bg-transparent p-0 opacity-50 hover:opacity-100 transition-opacity",
-        month_grid: "w-full border-collapse space-x-1",
+          "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:text-slate-300 disabled:hover:bg-white transition-colors",
+        month_caption: "flex h-7 items-center justify-start pl-1",
+        caption_label: "text-sm font-semibold text-slate-900 capitalize",
+        month_grid: "w-full border-collapse",
         weekdays: "flex",
-        weekday:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
-        week: "flex w-full mt-2",
-        day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md",
+        weekday: "w-9 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
+        week: "flex w-full mt-1",
+        day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
         day_button: cn(
-          "inline-flex h-8 w-8 items-center justify-center rounded-md p-0 font-normal",
-          "aria-selected:opacity-100",
-          "hover:bg-accent hover:text-accent-foreground",
-          "focus:bg-accent focus:text-accent-foreground focus:outline-none"
+          "inline-flex h-9 w-9 items-center justify-center rounded-md p-0 font-medium text-slate-700",
+          "hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500/30",
+          "disabled:pointer-events-none"
         ),
-        range_end: "day-range-end rounded-r-md",
-        range_start: "day-range-start rounded-l-md",
-        selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        today: "bg-accent text-accent-foreground",
-        outside:
-          "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
-        disabled: "text-muted-foreground opacity-50",
-        range_middle:
-          "aria-selected:bg-accent aria-selected:text-accent-foreground",
+        // Extremos do intervalo em vermelho da marca; miolo num tom bem mais claro, para o
+        // intervalo ser legível como faixa sem competir com as pontas.
+        selected: "[&>button]:bg-red-600 [&>button]:text-white [&>button]:hover:bg-red-700",
+        range_start: "rounded-l-md",
+        range_end: "rounded-r-md",
+        range_middle: "bg-red-50 [&>button]:bg-transparent [&>button]:text-red-900 [&>button]:hover:bg-red-100",
+        today: "[&>button]:ring-1 [&>button]:ring-inset [&>button]:ring-red-400 [&>button]:font-bold",
+        outside: "[&>button]:text-slate-300",
+        disabled: "[&>button]:text-slate-300 [&>button]:cursor-not-allowed",
         hidden: "invisible",
         ...classNames,
       }}
