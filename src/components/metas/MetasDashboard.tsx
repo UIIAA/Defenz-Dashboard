@@ -279,65 +279,68 @@ const labelK = (label: string | number | boolean | null | undefined) => {
 };
 const tickK = (v: number) => `${v / 1000}k`;
 
-// Gráfico A — Receita Defenz vs Meta. Cor de dado por atingimento (nunca vermelho por padrão):
-// grafite (bateu) · cinza médio (quase, ≥80%) · cinza claro (abaixo). Semana em curso (última
-// barra) some com opacidade — evita "acusar" uma semana que mal começou.
-function ReceitaMetaChart({ data, isInterval }: { data: ChartRow[]; isInterval: boolean }) {
-  const barColor = (rev: number, meta: number) => {
-    const pctAbs = meta > 0 ? rev / meta : 0;
-    if (pctAbs >= 1) return '#334155';
-    if (pctAbs >= 0.8) return '#94a3b8';
-    return '#cbd5e1';
-  };
+// Gráfico único de receita (feature-metas-legibilidade §3): absorve os antigos gráficos
+// B (Direcionado SS) e C (Esforço → Vendas), que repetiam as mesmas barras.
+//
+// Por que as DUAS séries aparecem: antes só a Venda direta Defenz virava barra e o
+// Direcionado SS existia apenas no tooltip. Em julho isso escondia 88% do dinheiro —
+// a semana 27–31/07 parecia vazia quando foi a maior do mês (R$ 71.861 direcionados).
+// Agora a soma visível do gráfico é a mesma do card de cima.
+//
+// Cor: Defenz em grafite, Direcionado SS em cinza claro — CONSTANTES. A versão anterior
+// variava o tom da barra Defenz por atingimento, o que com duas séries deixaria a barra
+// Defenz fraca indistinguível da barra SS. O atingimento se lê pela linha de meta, que é
+// o que o gráfico existe para mostrar.
+// Azul (claro = meta, escuro = esforço) nunca é status nesta paleta — verde/âmbar/vermelho
+// seguem reservados para status, e vermelho só para problema real.
+const COR_DEFENZ = '#334155';
+const COR_SS = '#cbd5e1';
+const COR_META = '#7dd3fc';
+const COR_ESFORCO = '#0284c7';
+
+function ReceitaChart({ data, isInterval }: { data: ChartRow[]; isInterval: boolean }) {
+  const temParcial = data.some(d => d.parcial);
+  const temEmCurso = data.some(d => d.emCurso);
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
-      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">
-        {isInterval ? `Receita Defenz vs Meta — semana a semana (${data.length})` : `Receita Defenz vs Meta — últimas ${data.length} semanas`}
+      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-1">
+        {isInterval ? `Venda ganha semana a semana (${data.length})` : `Venda ganha — últimas ${data.length} semanas`}
       </h2>
-      <ResponsiveContainer width="100%" height={300}>
+      <p className="text-[11px] text-slate-500 mb-3">
+        Barras = venda ganha, separada por origem. <span className="font-medium text-slate-600">A meta vale só para a Venda direta Defenz</span> —
+        o Direcionado SS é informativo e fica fora dela. A linha azul escura é o esforço do período (eixo da direita).
+      </p>
+      <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={data} margin={{ top: 20, right: 8, bottom: 4, left: 0 }}>
           <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-          <YAxis domain={[0, (max: number) => Math.max(max, 8000)]} tickFormatter={tickK} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis yAxisId="rev" domain={[0, (max: number) => Math.max(max, 8000)]} tickFormatter={tickK} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false}
+            label={{ value: 'R$', position: 'insideTopLeft', fill: '#64748b', fontSize: 11 }} />
+          <YAxis yAxisId="esf" orientation="right" tick={{ fill: COR_ESFORCO, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false}
+            label={{ value: 'ações', position: 'insideTopRight', fill: COR_ESFORCO, fontSize: 11 }} />
           <ReTooltip content={ReceitaTooltip} />
           <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-          <Line type="monotone" dataKey="meta" name="Meta da semana" stroke="#64748b" strokeWidth={2} strokeDasharray="5 4" dot={false} />
-          <Bar dataKey="receitaDefenz" name="Venda direta Defenz" minPointSize={3} maxBarSize={48} radius={[4, 4, 0, 0]}>
+          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Venda direta Defenz" fill={COR_DEFENZ} minPointSize={3} maxBarSize={38} radius={[4, 4, 0, 0]}>
             <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#64748b' }} />
             {data.map((row) => (
-              <Cell key={row.label} fill={barColor(row.receitaDefenz, row.meta)} fillOpacity={row.emCurso ? 0.45 : 1} />
+              <Cell key={row.label} fill={COR_DEFENZ} fillOpacity={row.emCurso ? 0.45 : 1} />
             ))}
           </Bar>
+          <Bar yAxisId="rev" dataKey="receitaDirecionadoSS" name="Direcionado SS" fill={COR_SS} maxBarSize={38} radius={[4, 4, 0, 0]}>
+            <LabelList dataKey="receitaDirecionadoSS" position="top" formatter={labelK} style={{ fontSize: 11, fill: '#94a3b8' }} />
+          </Bar>
+          <Line yAxisId="rev" type="monotone" dataKey="meta" name="Meta da semana (só Defenz)" stroke={COR_META} strokeWidth={2.5} strokeDasharray="5 4" dot={false} />
+          <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço (ações)" stroke={COR_ESFORCO} strokeWidth={2} dot={{ r: 3, fill: '#fff', stroke: COR_ESFORCO, strokeWidth: 2 }} />
         </ComposedChart>
       </ResponsiveContainer>
       <p className="mt-2 text-[11px] text-slate-400">
-        {data.some(d => d.emCurso) ? 'barra clara = semana em curso · ' : ''}
-        {data.some(d => d.parcial) ? 'semana parcial = recortada pelo período (meta proporcional)' : 'meta de R$ 6.000 por semana inteira'}
+        {temEmCurso ? 'barra clara = semana em curso · ' : ''}
+        {temParcial ? 'semana parcial = recortada pelo período (meta proporcional) · ' : ''}
+        esforço vende com atraso — compare tendências, não a mesma semana.
       </p>
     </div>
   );
 }
 
-// Gráfico B — Direcionado SS. Informativo: não conta na meta semanal, por isso um único
-// neutro claro (sem gradação por atingimento — não há "meta" pro Direcionado SS).
-function DirecionadoSSChart({ data }: { data: ChartRow[] }) {
-  return (
-    <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
-      <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-3">Direcionado SS</h2>
-      <ResponsiveContainer width="100%" height={180}>
-        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-          <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-          <YAxis tickFormatter={tickK} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-          <ReTooltip content={ReceitaTooltip} />
-          <Bar dataKey="receitaDirecionadoSS" name="Direcionado SS" fill="#cbd5e1" maxBarSize={48} radius={[4, 4, 0, 0]} />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <p className="mt-2 text-[11px] text-slate-400">Informativo — não conta na meta semanal.</p>
-    </div>
-  );
-}
-
-// Delta de eficiência: guarda de amostra (< 3) suprime a variação — "— amostra pequena",
-// nunca vermelho (queda de índice = atenção, não incêndio).
 function EficienciaDeltaTag({ v }: { v: number | null }) {
   if (v === null) {
     return <span className="text-[11px] text-slate-400">— amostra pequena</span>;
@@ -355,33 +358,42 @@ function EficienciaDeltaTag({ v }: { v: number | null }) {
   );
 }
 
-// 4 tiles de eficiência Esforço→Vendas (spec §5b). null → "—"; fração crua na sub-linha.
+// 4 tiles de eficiência Esforço→Vendas. null → "—"; fração crua na sub-linha (é ela que
+// deixa o número auditável) + uma linha de leitura em português (feature-metas-legibilidade §1).
 function EficienciaGrid({ eficiencia, c }: { eficiencia: MetasEficiencia; c: MetasConsolidado }) {
-  const { atual, delta, labelComparacao } = eficiencia;
-  const items: { label: string; value: string; delta: number | null; fracao: string }[] = [
+  const { atual, delta } = eficiencia;
+  const items: { label: string; value: string; delta: number | null; fracao: string; leitura: string }[] = [
     {
       label: 'Ticket médio',
       value: atual.ticketMedio === null ? '—' : brl(atual.ticketMedio),
       delta: delta.ticketMedio,
       fracao: `${brl(c.revenue)} ÷ ${c.dealsDefenz} venda${c.dealsDefenz === 1 ? '' : 's'}`,
+      leitura: 'quanto vale, em média, cada venda fechada',
     },
     {
       label: 'R$ / proposta',
       value: atual.rsPorProposta === null ? '—' : brl(atual.rsPorProposta),
       delta: delta.rsPorProposta,
       fracao: `${brl(c.revenue)} ÷ ${nf(c.esforco.propostas)} proposta${c.esforco.propostas === 1 ? '' : 's'}`,
+      leitura: 'quanto de receita cada proposta enviada gerou',
     },
     {
       label: 'Propostas / 100 ligações',
       value: atual.propostasPor100Ligacoes === null ? '—' : atual.propostasPor100Ligacoes.toLocaleString('pt-BR', { maximumFractionDigits: 1 }),
       delta: delta.propostasPor100Ligacoes,
       fracao: `${nf(c.esforco.propostas)} propostas ÷ ${nf(c.esforco.ligacoes)} ligações`,
+      leitura: 'quantas propostas saem a cada 100 ligações',
     },
     {
-      label: 'Reunião → proposta',
-      value: atual.reuniaoParaProposta === null ? '—' : pct(atual.reuniaoParaProposta),
+      // Era "Reunião → proposta · 233%" (e "190%" noutro período). O rótulo prometia TAXA DE
+      // CONVERSÃO — que por definição vai de 0 a 100% — e a conta entregava um MULTIPLICADOR:
+      // 42 propostas ÷ 18 reuniões = 2,33. Percentual acima de 100% em algo chamado conversão
+      // confunde por construção, e legenda nenhuma conserta. Vira razão, sem %.
+      label: 'Propostas por reunião',
+      value: atual.reuniaoParaProposta === null ? '—' : atual.reuniaoParaProposta.toLocaleString('pt-BR', { maximumFractionDigits: 1 }),
       delta: delta.reuniaoParaProposta,
       fracao: `${nf(c.esforco.propostas)} propostas ÷ ${nf(c.esforco.reunioes)} reuniões`,
+      leitura: 'quantas propostas cada reunião gera',
     },
   ];
   return (
@@ -391,57 +403,28 @@ function EficienciaGrid({ eficiencia, c }: { eficiencia: MetasEficiencia; c: Met
           <div key={it.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{it.label}</p>
             <p className="text-xl font-semibold text-slate-900 tabular-nums mt-1">{it.value}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">{it.fracao}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{it.leitura}</p>
+            <p className="text-[11px] text-slate-400">{it.fracao}</p>
             <div className="mt-1"><EficienciaDeltaTag v={it.delta} /></div>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-slate-400">{labelComparacao}</p>
     </div>
   );
 }
 
-// Gráfico C — Esforço → Vendas: linha do tempo dual-axis (barras = receita, linha = esforço)
-// + índices de eficiência do período selecionado. Eixos rotulados e coloridos (R$ / ações).
-function EsforcoVendasCard({ data, eficiencia, c }: { data: ChartRow[]; eficiencia: MetasEficiencia; c: MetasConsolidado }) {
+// Índices Esforço → Vendas do período selecionado. O gráfico que existia aqui foi
+// absorvido pelo gráfico único de receita — ele repetia as mesmas barras.
+function EficienciaCard({ eficiencia, c }: { eficiencia: MetasEficiencia; c: MetasConsolidado }) {
   return (
     <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/60 shadow-lg shadow-slate-200/50 p-5">
       <h2 className="text-sm font-bold uppercase tracking-widest text-red-600 mb-1">Esforço → Vendas</h2>
-      <p className="text-[11px] text-slate-400 mb-3">barras = receita · linha = esforço (qtde de ações)</p>
-      <ResponsiveContainer width="100%" height={260}>
-        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-          <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-          <YAxis
-            yAxisId="rev"
-            tick={{ fill: '#64748b', fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={tickK}
-            label={{ value: 'R$', position: 'insideTopLeft', fill: '#64748b', fontSize: 11 }}
-          />
-          <YAxis
-            yAxisId="esf"
-            orientation="right"
-            tick={{ fill: '#0284c7', fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            allowDecimals={false}
-            label={{ value: 'ações', position: 'insideTopRight', fill: '#0284c7', fontSize: 11 }}
-          />
-          <ReTooltip content={ReceitaTooltip} />
-          <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-          <Bar yAxisId="rev" dataKey="receitaDefenz" name="Receita" fill="#64748b" radius={[4, 4, 0, 0]} maxBarSize={40} />
-          <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço (ações)" stroke="#0284c7" strokeWidth={2} dot={{ r: 3, fill: '#fff', stroke: '#0284c7', strokeWidth: 2 }} />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <p className="mt-2 text-[11px] text-slate-400 italic">Esforço vende com atraso — compare tendências, não a mesma semana.</p>
-
-      <div className="mt-5 pt-5 border-t border-slate-100">
-        <EficienciaGrid eficiencia={eficiencia} c={c} />
-      </div>
+      <p className="text-sm font-medium text-slate-600 mb-3">{eficiencia.labelComparacao}</p>
+      <EficienciaGrid eficiencia={eficiencia} c={c} />
     </div>
   );
 }
+
 
 // Presets do seletor de período (spec §6) — segmented control em linha própria.
 const PRESETS: { key: PresetKey; label: string }[] = [
@@ -604,15 +587,10 @@ export const MetasDashboard = () => {
             ? <ConsolidadoCard c={response.consolidado} />
             : retro && <PorqueBloco w={retro} isRetro={semanas.length > 1} />}
 
-          {semanas.length > 1 && (
-            <>
-              <ReceitaMetaChart data={chartData} isInterval={isInterval} />
-              <DirecionadoSSChart data={chartData} />
-            </>
-          )}
+          {semanas.length > 1 && <ReceitaChart data={chartData} isInterval={isInterval} />}
 
           {response?.eficiencia && response?.consolidado && (
-            <EsforcoVendasCard data={chartData} eficiencia={response.eficiencia} c={response.consolidado} />
+            <EficienciaCard eficiencia={response.eficiencia} c={response.consolidado} />
           )}
         </motion.div>
       )}
