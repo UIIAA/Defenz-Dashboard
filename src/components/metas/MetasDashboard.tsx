@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Legend, Cell, LabelList,
+  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -308,6 +308,33 @@ const COR_SS = '#94a3b8';
 const COR_META = '#7dd3fc';
 const COR_ESFORCO = '#0284c7';
 
+// Legenda própria. A do Recharts lista uma cor por SÉRIE, e a barra de Venda direta Defenz
+// tem duas: verde quando bate a meta, preta quando não bate — o verde nunca aparecia na
+// legenda automática, só a cor base (preta).
+function LegendaReceita() {
+  const itens = [
+    { tipo: 'barra', cor: COR_BATEU, texto: 'Venda direta Defenz — bateu a meta' },
+    { tipo: 'barra', cor: COR_ABAIXO, texto: 'Venda direta Defenz — abaixo da meta' },
+    { tipo: 'barra', cor: COR_SS, texto: 'Direcionado SS (fora da meta)' },
+    { tipo: 'tracejada', cor: COR_META, texto: 'Meta da semana' },
+    { tipo: 'linha', cor: COR_ESFORCO, texto: 'Esforço em ações (eixo da direita)' },
+  ] as const;
+  return (
+    <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pt-3 text-xs text-slate-600">
+      {itens.map(it => (
+        <li key={it.texto} className="flex items-center gap-1.5">
+          {it.tipo === 'barra' && <span className="h-3 w-3 rounded-sm" style={{ background: it.cor }} />}
+          {it.tipo === 'linha' && <span className="h-[3px] w-5 rounded-full" style={{ background: it.cor }} />}
+          {it.tipo === 'tracejada' && (
+            <span className="h-[3px] w-5 rounded-full" style={{ backgroundImage: `repeating-linear-gradient(to right, ${it.cor} 0 6px, transparent 6px 10px)` }} />
+          )}
+          {it.texto}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ReceitaChart({ data, isInterval }: { data: ChartRow[]; isInterval: boolean }) {
   const temParcial = data.some(d => d.parcial);
   const temEmCurso = data.some(d => d.emCurso);
@@ -334,7 +361,6 @@ function ReceitaChart({ data, isInterval }: { data: ChartRow[]; isInterval: bool
           <YAxis yAxisId="esf" orientation="right" tick={{ fill: COR_ESFORCO, fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false}
             label={{ value: 'ações', position: 'insideTopRight', fill: COR_ESFORCO, fontSize: 12 }} />
           <ReTooltip content={ReceitaTooltip} />
-          <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />
           <Bar yAxisId="rev" dataKey="receitaDefenz" name="Venda direta Defenz" fill={COR_ABAIXO} minPointSize={3} maxBarSize={38} radius={[4, 4, 0, 0]}>
             {!denso && <LabelList dataKey="receitaDefenz" position="top" formatter={labelK} style={{ fontSize: 12, fill: '#334155', fontWeight: 600 }} />}
             {data.map((row) => (
@@ -352,6 +378,7 @@ function ReceitaChart({ data, isInterval }: { data: ChartRow[]; isInterval: bool
           <Line yAxisId="esf" type="monotone" dataKey="esforcoTotal" name="Esforço (ações)" stroke={COR_ESFORCO} strokeWidth={2} dot={{ r: 3, fill: '#fff', stroke: COR_ESFORCO, strokeWidth: 2 }} />
         </ComposedChart>
       </ResponsiveContainer>
+      <LegendaReceita />
       <p className="mt-2 text-xs text-slate-500">
         {temEmCurso ? 'barra clara = semana em curso · ' : ''}
         {temParcial ? 'semana parcial = recortada pelo período (meta proporcional) · ' : ''}
