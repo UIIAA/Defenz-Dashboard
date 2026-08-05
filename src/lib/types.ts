@@ -807,6 +807,8 @@ export interface WeekMetric {
 // Usado no /metas quando o usuário seleciona um intervalo (consolidado do período)
 // e sempre presente para reconciliar totais. Ver feature-metas-robo-semana §3.
 export interface MetasConsolidado {
+  /** dias Seg–Sex dentro do período. É o que escala a meta (GOAL_WEEK × diasUteis/5). */
+  diasUteis: number;
   weekStart: string;      // segunda da semana mais antiga da janela
   weekEnd: string;        // domingo da semana mais recente da janela
   nWeeks: number;         // nº de semanas na janela

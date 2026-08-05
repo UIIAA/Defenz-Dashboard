@@ -122,7 +122,7 @@ function FarolMetas({ res }: { res: MetasResponse }) {
           {fechado ? 'Farol — como o período fechou' : 'Farol — onde estou agora'}
         </h2>
         <span className="text-[11px] text-slate-400">
-          meta R$ 6.000/semana · {fechado && ate ? `posição em ${ate}` : 'ao vivo'}
+          meta R$ 6.000 por semana cheia · {fechado && ate ? `posição em ${ate}` : 'ao vivo'}
         </span>
       </div>
       <div className="flex flex-col sm:flex-row gap-3">
@@ -185,8 +185,12 @@ function ConsolidadoCard({ c }: { c: MetasConsolidado }) {
         />
       </div>
       <div className="mt-2 flex items-center justify-between text-xs">
-        <span className={`font-bold tabular-nums ${cor.text}`}>{pct(c.pctAbs)} da meta do período</span>
-        <span className="text-slate-400">esforço somado (Seg–Sex)</span>
+        <span className={`font-bold tabular-nums ${cor.text}`}>
+          {pct(c.pctAbs)} da meta — {brl(c.revenue)} de {brl(c.goal)}
+        </span>
+        <span className="text-slate-400 tabular-nums">
+          {c.diasUteis} dia{c.diasUteis === 1 ? '' : 's'} úte{c.diasUteis === 1 ? 'l' : 'is'} · esforço Seg–Sex
+        </span>
       </div>
 
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -496,7 +500,7 @@ export const MetasDashboard = () => {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 font-display">Farol de Metas</h1>
-            <p className="text-sm text-slate-500 mt-1">Meta semanal: <span className="font-semibold text-slate-700">R$ 6.000</span> · só Venda direta Defenz — Direcionado SS é informativo</p>
+            <p className="text-sm text-slate-500 mt-1">Meta: <span className="font-semibold text-slate-700">R$ 6.000</span> por semana cheia — proporcional aos dias úteis quando o período recorta a semana. Só Venda direta Defenz; Direcionado SS é informativo.</p>
           </div>
           <div className="flex items-center gap-2">
             {response?._cached && <span className="text-xs text-amber-500">cache</span>}

@@ -230,6 +230,7 @@ function buildConsolidado(raw: WeekRaw[]): MetasConsolidado {
     weekStart: oldest.weekStart,
     weekEnd: newest.weekEnd,
     nWeeks,
+    diasUteis: raw.reduce((s, w) => s + w.diasUteis, 0),
     revenue,
     revenueDirecionadoSS,
     revenueTotal: revenue + revenueDirecionadoSS,
