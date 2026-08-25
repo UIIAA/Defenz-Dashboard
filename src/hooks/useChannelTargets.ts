@@ -34,7 +34,8 @@ export function useChannelTargets() {
 
       if (whoamiRes.ok) {
         const json = await whoamiRes.json();
-        setCanEdit(json.role === 'admin');
+        // super_admin e SUPERSET de admin — comparar com a string crua tirava o lapis dele.
+        setCanEdit(json.role === 'admin' || json.role === 'super_admin');
       } else {
         setCanEdit(false);
       }

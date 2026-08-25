@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession } from "@/lib/auth";
+import { verifySession, isAdmin } from "@/lib/auth";
 import { getChannelTargets, setChannelTargets } from "@/lib/metas-canal";
 import type { CanalCategoria, ChannelTargets } from "@/lib/types";
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await verifySession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!isAdmin(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as Partial<Record<CanalCategoria, unknown>> | null;
   if (!body || typeof body !== "object") {

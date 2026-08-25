@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession } from "@/lib/auth";
+import { verifySession, isAdmin } from "@/lib/auth";
 
 // `/api/ingest` (e `/api/ingest/paridade`) NÃO passam pelo guard de sessão porque são
 // máquina-a-máquina: quem chama é o n8n, que não tem cookie. A autenticação delas é o
@@ -24,7 +24,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Gate de papel: /admin é só pra admin (role lido do cookie, sem query).
-  if (pathname.startsWith("/admin") && session.role !== "admin") {
+  if (pathname.startsWith("/admin") && !isAdmin(session.role)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

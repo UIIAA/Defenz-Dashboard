@@ -4,7 +4,30 @@ import { cookies } from "next/headers";
 const COOKIE_NAME = "defenz_session";
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
-export type Role = "admin" | "member";
+// feature-super-admin. `super_admin` é SUPERSET de `admin`: tudo que admin faz, ele faz.
+// A única coisa que só ele faz é mexer noutro super_admin (ver src/app/admin/actions.ts).
+export type Role = "super_admin" | "admin" | "member";
+
+export const ROLES: readonly Role[] = ["super_admin", "admin", "member"] as const;
+
+export function isRole(v: unknown): v is Role {
+  return typeof v === "string" && (ROLES as readonly string[]).includes(v);
+}
+
+/**
+ * Tem poderes administrativos. USE ISTO — nunca `role === "admin"`.
+ *
+ * Comparar com a string crua foi o que quase trancou o dono pra fora: promover alguém a
+ * super_admin com um `role === "admin"` sobrando no caminho remove o poder em vez de somar.
+ */
+export function isAdmin(role: Role | undefined | null): boolean {
+  return role === "admin" || role === "super_admin";
+}
+
+/** Só o topo: gerir outros super_admins e ver telas ainda não liberadas. */
+export function isSuperAdmin(role: Role | undefined | null): boolean {
+  return role === "super_admin";
+}
 
 // feature-auth-individual: a sessão passou a carregar a IDENTIDADE (antes era só
 // `{ authenticated }`). Cookies antigos sem `sub` são rejeitados no verify → forçam
@@ -91,7 +114,7 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
 
     const parsed: SessionPayload = JSON.parse(payload);
     // Exige identidade: cookies antigos (sem sub) e papéis inválidos são rejeitados.
-    if (!parsed.sub || (parsed.role !== "admin" && parsed.role !== "member")) return null;
+    if (!parsed.sub || !isRole(parsed.role)) return null;
     if (parsed.exp < Math.floor(Date.now() / 1000)) return null;
     return parsed;
   } catch {

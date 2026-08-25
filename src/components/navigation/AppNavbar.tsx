@@ -6,7 +6,16 @@ import { DateFilter } from '@/components/ui/DateFilter';
 import { NavLink } from './NavLink';
 import { useDateRange } from '@/providers/DateRangeProvider';
 
-export const AppNavbar = () => {
+interface AppNavbarProps {
+  /**
+   * Papel de topo (super_admin). Libera as telas ainda NÃO conferidas — Executivo e
+   * Operacional. Vem do servidor via layout; o link some pra todo mundo que não é preview,
+   * e a rota também barra (esconder o link não protege quem digita a URL).
+   */
+  preview?: boolean;
+}
+
+export const AppNavbar = ({ preview = false }: AppNavbarProps) => {
   const { dateRange, setDateRange } = useDateRange();
   const pathname = usePathname();
   // /diario tem seu próprio navegador; /metas usa semana ISO própria — nos dois o
@@ -21,9 +30,9 @@ export const AppNavbar = () => {
             Defenz<span className="text-red-600">.Dashboard</span>
           </h1>
           <nav className="hidden md:flex items-center gap-1 ml-4">
-            <NavLink href="/" disabled>Executivo</NavLink>
+            {preview && <NavLink href="/">Executivo</NavLink>}
             <NavLink href="/diario">Resumo Diário</NavLink>
-            <NavLink href="/operacional" disabled>Operacional</NavLink>
+            {preview && <NavLink href="/operacional">Operacional</NavLink>}
             <NavLink href="/atividade" disabled>Atividade</NavLink>
             <NavLink href="/metas">Metas</NavLink>
           </nav>
@@ -34,9 +43,9 @@ export const AppNavbar = () => {
         </div>
         {/* Mobile nav */}
         <nav className="flex md:hidden items-center gap-1 mt-3 flex-wrap">
-          <NavLink href="/" disabled>Executivo</NavLink>
+          {preview && <NavLink href="/">Executivo</NavLink>}
           <NavLink href="/diario">Resumo Diário</NavLink>
-          <NavLink href="/operacional" disabled>Operacional</NavLink>
+          {preview && <NavLink href="/operacional">Operacional</NavLink>}
           <NavLink href="/atividade" disabled>Atividade</NavLink>
           <NavLink href="/metas">Metas</NavLink>
         </nav>

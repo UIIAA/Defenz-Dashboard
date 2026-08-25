@@ -4,7 +4,11 @@
 
 import { db } from "./db";
 
-export type Role = "admin" | "member";
+// Role vinha DUPLICADO aqui e em auth.ts. As duas cópias divergiram na hora de adicionar
+// `super_admin` — re-exporta (type-only, some no build) para não haver duas verdades.
+export type { Role } from "./auth";
+import type { Role } from "./auth";
+
 export type AccessEvent = "login_ok" | "login_fail" | "logout";
 
 export interface UserRow {
@@ -76,6 +80,16 @@ export async function createUser(input: {
     insert into users (email, name, password_hash, role)
     values (${input.email.toLowerCase()}, ${input.name}, ${input.passwordHash}, ${input.role})
   `;
+}
+
+/**
+ * Papel do alvo de uma ação administrativa. Existe para o /admin poder recusar que um
+ * `admin` desative ou troque a senha de um `super_admin` — sem isto, o papel de topo é
+ * decorativo (dívida D-01: hoje qualquer admin derruba a conta do dono).
+ */
+export async function getUserRole(id: string): Promise<Role | null> {
+  const rows = (await db()`select role from users where id = ${id} limit 1`) as { role: Role }[];
+  return rows[0]?.role ?? null;
 }
 
 export async function setActive(id: string, active: boolean): Promise<void> {

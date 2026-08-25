@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { verifySession } from "@/lib/auth";
+import { verifySession, isSuperAdmin } from "@/lib/auth";
 import { listUsers, listRecentAccess } from "@/lib/users";
 import { createUserAction, toggleActiveAction, resetPasswordAction } from "./actions";
 
@@ -25,7 +25,8 @@ const card = "rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200/6
 const input = "px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none";
 
 export default async function AdminPage() {
-  const session = await verifySession(); // middleware garante admin; usamos só o nome
+  const session = await verifySession(); // middleware garante admin; usamos nome e papel
+  const souSuperAdmin = isSuperAdmin(session?.role);
   const [users, access] = await Promise.all([listUsers(), listRecentAccess(50)]);
 
   return (
@@ -56,6 +57,8 @@ export default async function AdminPage() {
             <select name="role" className={input} defaultValue="member">
               <option value="member">member</option>
               <option value="admin">admin</option>
+              {/* conceder super_admin exige ser super_admin — a action revalida no servidor */}
+              {souSuperAdmin && <option value="super_admin">super_admin</option>}
             </select>
             <button type="submit" className="px-4 py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
               Criar
@@ -84,7 +87,13 @@ export default async function AdminPage() {
                     <td className="py-2.5 pr-3 font-medium text-slate-900">{u.name}</td>
                     <td className="py-2.5 pr-3 tabular-nums">{u.email}</td>
                     <td className="py-2.5 pr-3">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${u.role === "admin" ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                          u.role === "super_admin"
+                            ? "bg-violet-50 text-violet-700 border border-violet-200"
+                            : u.role === "admin"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-slate-100 text-slate-500"
+                      }`}>
                         {u.role}
                       </span>
                     </td>
