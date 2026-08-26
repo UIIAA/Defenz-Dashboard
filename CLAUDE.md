@@ -359,7 +359,25 @@ O n8n grava **no Sheets e no Neon**. O **Sheets continua sendo a fonte da verdad
 
 ### N8N Workflow
 
-- ID: `QjnzGicZHIPBNN1g` | 42 nos | Cron 6am/18pm + Webhook + Manual
+- ID: `QjnzGicZHIPBNN1g` | 54 nos | Cron 6am/18pm + Webhook + Manual
+
+**Janela de coleta INCREMENTAL desde 26/08/2026** (`feature-coleta-incremental.md`). O
+`Definir periodo` nao le mais desde `2025-11-01` a cada execucao: usa **retrolook de 1 dia**
+(`hoje` calculado em `America/Sao_Paulo`, nao UTC). Motivo: reler 295 dias por execucao
+inviabiliza rodar de hora em hora, e o Callbox estava a ~7 dias do teto de 20 paginas
+(18.270 ligacoes de 20.000, a 234/dia).
+
+- **Backfill:** `POST` no webhook com `{"full": true}` (desde 2025-11-01) ou `{"dias": N}`.
+  Execucao **manual roda incremental** de proposito — e assim que se testa a janela.
+- **Invariante do `call_id`:** `Format Ligacoes Raw` agrupa o payload da execucao para
+  desempatar pernas com ordinal (`base#2`). Isso so e seguro porque `isoDate` e o primeiro
+  campo da chave, logo todo membro de um grupo cai no mesmo dia. Ha uma **guarda executavel**
+  descartando linha com data nao parseavel — sem ela, `isoDate=''` faria a chave ficar sem
+  data e um grupo atravessaria dias, e a janela reatribuiria o ordinal reescrevendo a linha
+  errada. Verificacao: `node scripts/teste-nos-n8n.mjs`.
+- **Cadencia por entidade (planejado, NAO aplicado):** fatos + deals de hora em hora; leads e
+  agenda 2x/dia. Sem isso, subir a frequencia AUMENTA a escrita no Sheets em 33%, porque as
+  dimensoes seguem full refresh (3.034 linhas so de leads por execucao).
 - Fontes: Zoho CRM (Deals, Leads), Apollo (Emails), Callbox (Calls), Microsoft Calendar, Gemini (IA classification)
 - Detalhes em `docs/NOVA_ARQUITETURA_N8N.md`
 
