@@ -221,6 +221,9 @@ const DEFS: Record<Tabela, DefTabela> = {
       ['modified_time', 'modified_time', data],
       ['closing_date', 'closing_date', data],
       ['resultados', 'resultados', texto],
+      // feature-semaforo-oportunidades — normalizado na origem pelo `Format Deals Raw`
+      // ('quente'|'morno'|'frio'|''). Aqui é só texto: valor torto vira '' antes de chegar.
+      ['temperatura', 'temperatura', texto],
     ],
     pos: (bruta, saida) => {
       saida.tags = splitTags(typeof bruta.tags === 'string' ? bruta.tags : null);

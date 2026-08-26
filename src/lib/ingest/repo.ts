@@ -84,6 +84,7 @@ const DEFS: Record<Tabela, DefSQL> = {
       txt('categoria'),
       { campo: 'comissao_valor', tipo: 'numeric' },
       int('licencas'),
+      txt('temperatura'),
       { campo: 'created_time', tipo: 'date' },
       { campo: 'modified_time', tipo: 'date' },
       { campo: 'closing_date', tipo: 'date' },

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { SemaforoDot, TEMPERATURA_NOME } from './SemaforoDot';
 import type { Oportunidade, OportunidadesResult, Temperatura } from '@/lib/oportunidades';
@@ -15,6 +15,11 @@ import { ErrorState } from '@/components/shared/ErrorState';
 type Filtro = Temperatura | 'vazio';
 const CHIPS: Filtro[] = ['quente', 'morno', 'frio', 'vazio'];
 const chipTemp = (f: Filtro): Temperatura | '' => (f === 'vazio' ? '' : f);
+
+/** Mesma janela do servidor (`refresh/route.ts`). O cliente é conveniência; o servidor manda. */
+const JANELA_MS = 2 * 60 * 1000;
+
+type Payload = OportunidadesResult & { atualizado_em?: string };
 
 function LinhaOportunidade({ o }: { o: Oportunidade }) {
   // Sem cor no "dias sem toque": o número já é o sinal, e vermelho nesta tela já é "Quente".
@@ -48,34 +53,65 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
   );
 }
 
+const horaBR = (iso?: string) =>
+  iso
+    ? new Date(iso).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      })
+    : null;
+
 export const OportunidadesDashboard = () => {
-  const [data, setData] = useState<OportunidadesResult | null>(null);
+  const [data, setData] = useState<Payload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<Set<Filtro>>(new Set());
+  const [atualizando, setAtualizando] = useState(false);
+  const ultimoRefresh = useRef(0);
+  const montado = useRef(true);
+
+  const atualizar = useCallback(async () => {
+    if (Date.now() - ultimoRefresh.current < JANELA_MS) return;
+    ultimoRefresh.current = Date.now();
+    setAtualizando(true);
+    try {
+      const r = await fetch('/api/oportunidades/refresh', { method: 'POST' });
+      const j = await r.json();
+      if (montado.current && !j.error) setData(j);
+    } catch {
+      // Falha do refresh não apaga o que já está na tela — só não atualiza.
+    } finally {
+      if (montado.current) setAtualizando(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let vivo = true;
+    montado.current = true;
+    // Primeiro o GET (rápido, cacheado): a tela aparece na hora em vez de esperar ~8s de
+    // workflow. Só depois dispara o refresh, que substitui os dados por baixo.
     fetch('/api/oportunidades')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j) => vivo && (j.error ? setErro(j.error) : setData(j)))
-      .catch(() => vivo && setErro('Não foi possível carregar as oportunidades.'));
+      .then((j) => {
+        if (!montado.current) return;
+        if (j.error) setErro(j.error);
+        else {
+          setData(j);
+          void atualizar();
+        }
+      })
+      .catch(() => montado.current && setErro('Não foi possível carregar as oportunidades.'));
     return () => {
-      vivo = false;
+      montado.current = false;
     };
-  }, []);
+  }, [atualizar]);
 
   const visiveis = useMemo(() => {
     if (!data) return [];
     if (filtros.size === 0) return data.itens;
-    return data.itens.filter((o) =>
-      filtros.has(o.temperatura === '' ? 'vazio' : o.temperatura)
-    );
+    return data.itens.filter((o) => filtros.has(o.temperatura === '' ? 'vazio' : o.temperatura));
   }, [data, filtros]);
 
-  const valorVisivel = useMemo(
-    () => visiveis.reduce((s, o) => s + o.valor, 0),
-    [visiveis]
-  );
+  const valorVisivel = useMemo(() => visiveis.reduce((s, o) => s + o.valor, 0), [visiveis]);
 
   if (erro) return <ErrorState error={erro} onRetry={() => window.location.reload()} />;
   if (!data) return <p className="text-sm text-slate-400 py-12 text-center">Carregando…</p>;
@@ -87,8 +123,24 @@ export const OportunidadesDashboard = () => {
     setFiltros(n);
   };
 
+  const hora = horaBR(data.atualizado_em);
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={atualizar}
+          disabled={atualizando}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-wait transition-colors"
+        >
+          <RefreshCw size={13} className={atualizando ? 'animate-spin' : undefined} aria-hidden />
+          {atualizando ? 'Atualizando…' : 'Atualizar'}
+        </button>
+        {/* Sem carimbo, ninguém sabe se está olhando o dado de agora ou o de ontem — e é
+            justamente essa dúvida que a tela existe pra matar. */}
+        {hora && <span className="text-xs text-slate-400">atualizado às {hora}</span>}
+      </div>
+
       {data.sem_classificacao > 0 && (
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
@@ -143,9 +195,7 @@ export const OportunidadesDashboard = () => {
           <LinhaOportunidade key={o.id} o={o} />
         ))}
         {visiveis.length === 0 && (
-          <p className="py-10 text-center text-sm text-slate-400">
-            Nenhum negócio com esse filtro.
-          </p>
+          <p className="py-10 text-center text-sm text-slate-400">Nenhum negócio com esse filtro.</p>
         )}
       </div>
     </div>
