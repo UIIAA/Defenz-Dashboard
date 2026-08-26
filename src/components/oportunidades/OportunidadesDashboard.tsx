@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, ChevronDown, RefreshCw } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { SemaforoDot, TEMPERATURA_NOME } from './SemaforoDot';
 import type { Oportunidade, OportunidadesResult, Temperatura } from '@/lib/oportunidades';
@@ -16,39 +16,83 @@ type Filtro = Temperatura | 'vazio';
 const CHIPS: Filtro[] = ['quente', 'morno', 'frio', 'vazio'];
 const chipTemp = (f: Filtro): Temperatura | '' => (f === 'vazio' ? '' : f);
 
+// Classes completas e estáticas: o Tailwind não vê nome de classe montado em runtime.
+// Chip ativo assume a PRÓPRIA cor — sem isso o único sinal de ligado/desligado era um cinza
+// levemente diferente, e ninguém percebe que o chip é clicável.
+const ATIVO: Record<Filtro, string> = {
+  quente: 'border-red-300 bg-red-50 text-red-800',
+  morno: 'border-amber-300 bg-amber-50 text-amber-800',
+  frio: 'border-blue-300 bg-blue-50 text-blue-800',
+  vazio: 'border-slate-400 bg-slate-100 text-slate-800',
+};
+
 /** Mesma janela do servidor (`refresh/route.ts`). O cliente é conveniência; o servidor manda. */
 const JANELA_MS = 2 * 60 * 1000;
 
 type Payload = OportunidadesResult & { atualizado_em?: string };
 
 function LinhaOportunidade({ o }: { o: Oportunidade }) {
+  const [aberto, setAberto] = useState(false);
+
   // Sem cor no "dias sem toque": o número já é o sinal, e vermelho nesta tela já é "Quente".
   const toque =
     o.dias_sem_toque === null
       ? 'sem registro datado'
       : `${o.ultimo_toque!.slice(8, 10)}/${o.ultimo_toque!.slice(5, 7)} · ${o.dias_sem_toque}d`;
 
+  // Medido nos 29 abertos: mediana 176 chars, p90 419. Duas linhas cobrem a mediana inteira,
+  // então a maioria das linhas não precisa expandir — o clique é para a cauda longa.
+  const temAndamento = Boolean(o.ultimo_andamento);
+
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
-      <SemaforoDot temperatura={o.temperatura} />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-slate-800 font-medium truncate">{o.nome}</p>
-        <p className="text-xs text-slate-400">
-          {o.stage}
-          {o.licencas > 0 && ` · ${o.licencas} lic`}
-        </p>
+    <div className="border-b border-slate-100 last:border-0">
+      <div className="flex items-center gap-3 py-2.5">
+        <SemaforoDot temperatura={o.temperatura} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-slate-800 font-medium truncate">{o.nome}</p>
+          <p className="text-xs text-slate-400">
+            {o.stage}
+            {o.licencas > 0 && ` · ${o.licencas} lic`}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 text-xs font-mono ${
+            o.dias_sem_toque === null ? 'text-slate-300 italic' : 'text-slate-500'
+          }`}
+          title="Último registro datado no campo Resultados do Zoho"
+        >
+          {toque}
+        </span>
+        <span className="shrink-0 text-sm font-mono text-slate-900 w-28 text-right">
+          {o.valor > 0 ? formatCurrency(o.valor) : '—'}
+        </span>
       </div>
-      <span
-        className={`shrink-0 text-xs font-mono ${
-          o.dias_sem_toque === null ? 'text-slate-300 italic' : 'text-slate-500'
-        }`}
-        title="Último registro datado no campo Resultados do Zoho"
-      >
-        {toque}
-      </span>
-      <span className="shrink-0 text-sm font-mono text-slate-900 w-28 text-right">
-        {o.valor > 0 ? formatCurrency(o.valor) : '—'}
-      </span>
+
+      {temAndamento && (
+        <button
+          onClick={() => setAberto((v) => !v)}
+          aria-expanded={aberto}
+          className="group w-full pb-2.5 pl-6 pr-1 text-left"
+        >
+          <span className="flex items-start gap-1.5">
+            <ChevronDown
+              size={13}
+              aria-hidden
+              className={`mt-0.5 shrink-0 text-slate-300 transition-transform group-hover:text-slate-500 ${
+                aberto ? 'rotate-180' : ''
+              }`}
+            />
+            {/* Texto literal do vendedor, sem resumo e sem IA. */}
+            <span
+              className={`text-xs leading-relaxed text-slate-500 whitespace-pre-line ${
+                aberto ? '' : 'line-clamp-2'
+              }`}
+            >
+              {o.ultimo_andamento}
+            </span>
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -113,6 +157,17 @@ export const OportunidadesDashboard = () => {
 
   const valorVisivel = useMemo(() => visiveis.reduce((s, o) => s + o.valor, 0), [visiveis]);
 
+  // Contagem por chip — o número muda quando o dado muda, e é o que deixa claro que o chip
+  // é um controle e não um rótulo.
+  const contagem = useMemo(() => {
+    const c: Partial<Record<Filtro, number>> = {};
+    for (const o of data?.itens ?? []) {
+      const k: Filtro = o.temperatura === '' ? 'vazio' : o.temperatura;
+      c[k] = (c[k] ?? 0) + 1;
+    }
+    return c;
+  }, [data]);
+
   if (erro) return <ErrorState error={erro} onRetry={() => window.location.reload()} />;
   if (!data) return <p className="text-sm text-slate-400 py-12 text-center">Carregando…</p>;
 
@@ -154,22 +209,23 @@ export const OportunidadesDashboard = () => {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-slate-400 mr-0.5">Filtrar</span>
         {CHIPS.map((f) => {
           const on = filtros.has(f);
+          const n = contagem[f] ?? 0;
           return (
             <button
               key={f}
               onClick={() => toggle(f)}
               aria-pressed={on}
-              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                on
-                  ? 'border-slate-400 bg-slate-100 text-slate-900'
-                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                on ? ATIVO[f] : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
               }`}
             >
               <SemaforoDot temperatura={chipTemp(f)} size="md" />
               {TEMPERATURA_NOME[chipTemp(f)]}
+              <span className={on ? 'opacity-70' : 'text-slate-400'}>{n}</span>
             </button>
           );
         })}

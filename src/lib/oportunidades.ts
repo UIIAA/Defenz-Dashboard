@@ -35,6 +35,8 @@ export interface Oportunidade {
   /** Último registro datado do `resultados`. null quando o texto não tem data. */
   ultimo_toque: string | null;
   dias_sem_toque: number | null;
+  /** Texto literal do último andamento escrito pelo vendedor no Zoho. */
+  ultimo_andamento: string | null;
   // SEM comissao_valor: a tela é aberta ao time (spec §5.2) e o campo é margem da Defenz.
 }
 
@@ -74,6 +76,7 @@ export function computeOportunidades(
       temperatura: normalizaTemp(d.temperatura),
       ultimo_toque: toque.data,
       dias_sem_toque: toque.dias,
+      ultimo_andamento: toque.texto,
     });
   }
 

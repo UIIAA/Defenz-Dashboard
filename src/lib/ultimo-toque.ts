@@ -32,6 +32,12 @@ export interface UltimoToque {
   data: string | null;
   /** Dias corridos desde `data` até `referencia`. null quando não há data. */
   dias: number | null;
+  /**
+   * O texto do último andamento — da última data até o fim do campo.
+   * Medido nos 29 abertos: mediana 176 chars, p90 419, máx 597.
+   * É o que o vendedor escreveu por último, literal. Sem resumo, sem IA.
+   */
+  texto: string | null;
 }
 
 /**
@@ -53,18 +59,32 @@ export function ultimoToque(resultados: string, referencia: string): UltimoToque
   const refMes = parseInt(ref.slice(5, 7), 10);
 
   const pares = paresDDMM(resultados);
-  if (pares.length === 0) return { data: null, dias: null };
+  if (pares.length === 0) return { data: null, dias: null, texto: null };
 
   const ultimo = pares[pares.length - 1];
   const ano = ultimo.mes > refMes ? refAno - 1 : refAno;
   const data = `${ano}-${String(ultimo.mes).padStart(2, '0')}-${ultimo.dia}`;
 
   // UTC dos dois lados: comparar datas puras, sem fuso entrar na conta.
-  const ms = Date.parse(`${data}T00:00:00Z`) ;
-  if (Number.isNaN(ms)) return { data: null, dias: null };
-  const dias = Math.max(
-    0,
-    Math.round((Date.parse(`${ref}T00:00:00Z`) - ms) / 86400000)
-  );
-  return { data, dias };
+  const ms = Date.parse(`${data}T00:00:00Z`);
+  if (Number.isNaN(ms)) return { data: null, dias: null, texto: null };
+  const dias = Math.max(0, Math.round((Date.parse(`${ref}T00:00:00Z`) - ms) / 86400000));
+
+  return { data, dias, texto: textoDoUltimo(resultados) };
+}
+
+/**
+ * Texto do último andamento: da última linha que ABRE com data até o fim.
+ *
+ * Ancora em início de linha (não em qualquer DD/MM) porque números no meio da frase são
+ * comuns — "as 30/40 licenças", "ligar no ramal 6240". Pegar o último par solto cortaria o
+ * andamento no meio de uma frase.
+ */
+function textoDoUltimo(resultados: string): string | null {
+  const t = String(resultados || '');
+  const marcas = [...t.matchAll(/(?:^|\n)\s*\d{2}\/\d{2}/g)];
+  if (marcas.length === 0) return null;
+  const corte = marcas[marcas.length - 1].index ?? 0;
+  const texto = t.slice(corte).trim();
+  return texto.length > 0 ? texto : null;
 }
