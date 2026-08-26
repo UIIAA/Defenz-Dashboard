@@ -18,9 +18,11 @@ interface AppNavbarProps {
 export const AppNavbar = ({ preview = false }: AppNavbarProps) => {
   const { dateRange, setDateRange } = useDateRange();
   const pathname = usePathname();
-  // /diario tem seu próprio navegador; /metas usa semana ISO própria — nos dois o
-  // filtro de intervalo global não se aplica (seria um no-op confuso).
-  const showRangeFilter = !pathname.startsWith('/diario') && !pathname.startsWith('/metas');
+  // /diario tem seu próprio navegador; /metas usa semana ISO própria; /oportunidades mostra o
+  // pipe ABERTO, que é um retrato do agora e não um intervalo — nos três o filtro de data
+  // global não se aplica (seria um no-op confuso).
+  const SEM_FILTRO_DATA = ['/diario', '/metas', '/oportunidades'];
+  const showRangeFilter = !SEM_FILTRO_DATA.some((r) => pathname.startsWith(r));
 
   return (
     <header className="mb-8 flex flex-col md:flex-row md:items-end md:justify-between">

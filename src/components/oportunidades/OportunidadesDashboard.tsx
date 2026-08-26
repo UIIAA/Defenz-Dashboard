@@ -19,6 +19,15 @@ const chipTemp = (f: Filtro): Temperatura | '' => (f === 'vazio' ? '' : f);
 // Classes completas e estáticas: o Tailwind não vê nome de classe montado em runtime.
 // Chip ativo assume a PRÓPRIA cor — sem isso o único sinal de ligado/desligado era um cinza
 // levemente diferente, e ninguém percebe que o chip é clicável.
+// Barra lateral de 3px na cor da temperatura. Delimita o inicio/fim de cada registro sem
+// desenhar linhas de tabela, e reforça a cor muito mais do que a bolinha sozinha.
+const BARRA: Record<Temperatura | '', string> = {
+  quente: 'border-l-red-500',
+  morno: 'border-l-amber-400',
+  frio: 'border-l-blue-500',
+  '': 'border-l-slate-200',
+};
+
 const ATIVO: Record<Filtro, string> = {
   quente: 'border-red-300 bg-red-50 text-red-800',
   morno: 'border-amber-300 bg-amber-50 text-amber-800',
@@ -34,19 +43,21 @@ type Payload = OportunidadesResult & { atualizado_em?: string };
 function LinhaOportunidade({ o }: { o: Oportunidade }) {
   const [aberto, setAberto] = useState(false);
 
-  // Sem cor no "dias sem toque": o número já é o sinal, e vermelho nesta tela já é "Quente".
   const toque =
     o.dias_sem_toque === null
       ? 'sem registro datado'
       : `${o.ultimo_toque!.slice(8, 10)}/${o.ultimo_toque!.slice(5, 7)} · ${o.dias_sem_toque}d`;
 
-  // Medido nos 29 abertos: mediana 176 chars, p90 419. Duas linhas cobrem a mediana inteira,
-  // então a maioria das linhas não precisa expandir — o clique é para a cauda longa.
-  const temAndamento = Boolean(o.ultimo_andamento);
+  // Duas linhas comportam ~180 chars nesta largura. Só oferece "ver tudo" quando há de fato
+  // texto escondido — botão que não revela nada é pior que botão nenhum.
+  const andamento = o.ultimo_andamento;
+  const temMais = Boolean(andamento && andamento.length > 170);
 
   return (
-    <div className="border-b border-slate-100 last:border-0">
-      <div className="flex items-center gap-3 py-2.5">
+    <div
+      className={`rounded-r-lg border-l-[3px] bg-white/70 py-2.5 pl-3 pr-1 transition-colors hover:bg-slate-50/80 ${BARRA[o.temperatura]}`}
+    >
+      <div className="flex items-center gap-3">
         <SemaforoDot temperatura={o.temperatura} />
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-800 font-medium truncate">{o.nome}</p>
@@ -68,30 +79,30 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
         </span>
       </div>
 
-      {temAndamento && (
-        <button
-          onClick={() => setAberto((v) => !v)}
-          aria-expanded={aberto}
-          className="group w-full pb-2.5 pl-6 pr-1 text-left"
-        >
-          <span className="flex items-start gap-1.5">
-            <ChevronDown
-              size={13}
-              aria-hidden
-              className={`mt-0.5 shrink-0 text-slate-300 transition-transform group-hover:text-slate-500 ${
-                aberto ? 'rotate-180' : ''
-              }`}
-            />
-            {/* Texto literal do vendedor, sem resumo e sem IA. */}
-            <span
-              className={`text-xs leading-relaxed text-slate-500 whitespace-pre-line ${
-                aberto ? '' : 'line-clamp-2'
-              }`}
+      {andamento && (
+        <div className="mt-1.5 pl-6">
+          <p
+            className={`text-xs leading-relaxed text-slate-500 whitespace-pre-line ${
+              aberto ? '' : 'line-clamp-2'
+            }`}
+          >
+            {andamento}
+          </p>
+          {temMais && (
+            <button
+              onClick={() => setAberto((v) => !v)}
+              aria-expanded={aberto}
+              className="mt-1 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 hover:underline"
             >
-              {o.ultimo_andamento}
-            </span>
-          </span>
-        </button>
+              {aberto ? 'ver menos' : 'ler o andamento completo'}
+              <ChevronDown
+                size={12}
+                aria-hidden
+                className={`transition-transform ${aberto ? 'rotate-180' : ''}`}
+              />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -246,7 +257,7 @@ export const OportunidadesDashboard = () => {
         )}
       </div>
 
-      <div>
+      <div className="space-y-1.5">
         {visiveis.map((o) => (
           <LinhaOportunidade key={o.id} o={o} />
         ))}
