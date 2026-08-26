@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchTabStrict, fetchFromSheets } from "@/lib/sheets";
 import { computeMetas, fonteVenda } from "@/lib/metas";
@@ -9,7 +10,7 @@ import type { RawResumoDiario, RawDeal, MetasResponse, FarolRef } from "@/lib/ty
 // /api/resumo-diario: the underlying sheet is a public gviz doc.
 
 const memoryCache = new Map<string, { data: MetasResponse; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: NextRequest) {

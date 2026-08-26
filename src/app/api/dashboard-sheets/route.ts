@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets, fetchTabStrict } from "@/lib/sheets";
 import { computeMetrics, getLastClosedClient, isPipeline, isClosedWon, bucketizeByWeek, computeClientesAtivos, computeRenovacoesVencidas, computePipelineBuckets, computeFaturamentoMensal, computeMrrArr, computeComissaoOwnerCanal, computeReceitaPorCanal } from "@/lib/metrics";
@@ -41,7 +42,7 @@ function resolveEmpresa(
 
 // Cache em memória (por instância do servidor)
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
 
 // Compute date range from period key
 function getDateRange(periodo: string): { start: string; end: string; label: string } {

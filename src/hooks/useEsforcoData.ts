@@ -1,10 +1,11 @@
 "use client";
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 
 import { useState, useEffect } from 'react';
 import type { EsforcoData } from '@/lib/types';
 
 const CACHE_KEY = 'defenz_esforco';
-const CACHE_TTL_MS = 30 * 60 * 1000;
+
 
 const emptyData: EsforcoData = {
   classificacoes: [],

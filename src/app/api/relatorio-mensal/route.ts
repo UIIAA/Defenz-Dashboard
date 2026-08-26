@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_LONGO_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets, fetchTabStrict } from "@/lib/sheets";
 import {
@@ -23,7 +24,7 @@ import type {
 
 // Cache em memória (por instância do servidor)
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+const CACHE_TTL_MS = CACHE_TTL_LONGO_MS;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];

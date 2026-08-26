@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_LONGO_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets } from "@/lib/sheets";
 import { computeFaturamentoMensal } from "@/lib/metrics";
 import type { RawDeal } from "@/lib/types";
 
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+const CACHE_TTL_MS = CACHE_TTL_LONGO_MS;
 
 export async function GET(request: NextRequest) {
   const session = await verifySession(request);

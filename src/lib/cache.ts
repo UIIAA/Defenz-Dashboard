@@ -1,7 +1,8 @@
 import type { N8nData } from './types';
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 
 export const CACHE_KEY_PREFIX = 'defenz_dashboard_';
-export const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
 
 export const getCachedData = (range: string): N8nData | null => {
   if (typeof window === 'undefined') return null;

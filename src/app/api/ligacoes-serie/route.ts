@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets } from "@/lib/sheets";
 import type { RawCall } from "@/lib/types";
@@ -6,7 +7,7 @@ import type { DailyCallPoint, MesSummary } from "@/lib/types";
 
 // Cache em memória (por instância do servidor)
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 

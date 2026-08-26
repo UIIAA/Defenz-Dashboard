@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets } from "@/lib/sheets";
 
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000;
+
 
 export async function GET(request: NextRequest) {
   const session = await verifySession(request);

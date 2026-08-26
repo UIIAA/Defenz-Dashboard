@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchTabStrict } from "@/lib/sheets";
 import {
@@ -23,7 +24,7 @@ import type { RawResumoDiario, ResumoDiarioResponse } from "@/lib/types";
 // sheet's sharing setting (stakeholder accepted "tudo no doc público").
 
 const memoryCache = new Map<string, { data: ResumoDiarioResponse; timestamp: number }>();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
