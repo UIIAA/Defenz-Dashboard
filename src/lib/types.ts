@@ -74,6 +74,12 @@ export interface RawDeal {
   // verificador — o campo do Zoho é texto livre e aceita palavra ("Localizando").
   // É a identidade de empresa; `empresa` (de `Account_Name`) está vazia em 100% dos deals.
   cnpj?: string;
+  // `temperatura` exportada em 2026-08-26 (feature-semaforo-oportunidades). Vem do campo
+  // `Temperatura` do Zoho (picklist Quente/Morno/Frio), JÁ NORMALIZADA pelo `Format Deals Raw`
+  // para 'quente'|'morno'|'frio' — valor fora do picklist vira '' e a tela mostra cinza.
+  // NÃO usar `Classificacao_IA`: é do ramo de IA desligado em 12/08 e seria um segundo dono
+  // da mesma verdade.
+  temperatura?: string;
   // FOOTGUN (feature-016 eval): estas TRÊS colunas abaixo continuam NÃO exportadas pela
   // aba `deals`. Compilam mas leem undefined → métricas que dependem delas
   // (computeComissaoOwnerCanal, computeRenovacoesVencidas) silenciosamente dão vazio/0.

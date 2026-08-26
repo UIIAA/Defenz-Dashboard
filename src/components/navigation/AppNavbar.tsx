@@ -33,7 +33,7 @@ export const AppNavbar = ({ preview = false }: AppNavbarProps) => {
             {preview && <NavLink href="/">Executivo</NavLink>}
             <NavLink href="/diario">Resumo Diário</NavLink>
             {preview && <NavLink href="/operacional">Operacional</NavLink>}
-            <NavLink href="/atividade" disabled>Atividade</NavLink>
+            <NavLink href="/oportunidades">Oportunidades</NavLink>
             <NavLink href="/metas">Metas</NavLink>
           </nav>
         </div>
@@ -46,7 +46,7 @@ export const AppNavbar = ({ preview = false }: AppNavbarProps) => {
           {preview && <NavLink href="/">Executivo</NavLink>}
           <NavLink href="/diario">Resumo Diário</NavLink>
           {preview && <NavLink href="/operacional">Operacional</NavLink>}
-          <NavLink href="/atividade" disabled>Atividade</NavLink>
+          <NavLink href="/oportunidades">Oportunidades</NavLink>
           <NavLink href="/metas">Metas</NavLink>
         </nav>
       </div>
