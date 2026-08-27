@@ -1,6 +1,11 @@
 # Spec — `Format Deals Raw`: uma fonte da verdade para as duas cópias
 
-> **Status: proposta.** Nada foi alterado no n8n. Workflows envolvidos:
+> **Status: IMPLEMENTADO em 27/08/2026** (unificação + D1 + D2). Decisões do Marcos: D1 matar a
+> sentinela, D2 fazer junto, D4 owner em commit separado, D3 **não fazer** — a planilha vai ser
+> extinta (§11), então o rewiring do `continueOnFail` seria trabalho jogado fora.
+>
+> Sub-workflow criado: `Defenz - Dashboard - Sub - Format Deals Raw` = `pDwyWZau5DwJm6L3`.
+> Verificação em §6.1. Workflows envolvidos:
 > `QjnzGicZHIPBNN1g` (Coleta Métricas v2) e `WlTnk2bHWYhibwyG` (Refresh Deals sob demanda).
 >
 > Motivo do pedido: em 27/08/2026 a f-038 precisou editar as duas cópias à mão de novo. Já são
@@ -287,3 +292,43 @@ Combinado para não escrever no mesmo nó ao mesmo tempo: **eu faço os dois pas
 + `owner`), depois que o Marcos aprovar esta spec. A sessão paralela não toca nos nós
 `Format Deals Raw` até lá. Se o Marcos preferir o `owner` já, antes da unificação, o caminho é
 ela fazer e eu rebasear a spec — mas aí são duas edições duplas em vez de uma unificada.
+
+## 6.1. O que foi verificado de fato
+
+| # | verificação | resultado |
+|---|---|---|
+| 1 | equivalência contra **299 negócios reais** (páginas cruas do Zoho da execução `95958`) | **0 diferenças** nos 16 campos; comissão total R$ 2.208.877, 230 CNPJs válidos, 67 com temperatura |
+| 2 | suíte de testes | **309 passando** (24 novos), lint limpo nos arquivos novos |
+| 3 | `--check` acusa divergência de verdade | alterei `taxa: 0.43 → 0.44` só no repo: saiu `EXIT=1` apontando a linha 33 |
+| 4 | refresh sob demanda ponta a ponta | `{ok:true, deals:299, com_temperatura:68}` em **7,8s** (antes ~8s) |
+| 5 | ingestão no Neon pelo refresh | `recebidos 299, atualizados 299, rejeitados 0, órfãos 0, erros []` |
+| 6 | **diff do retrato da aba `deals`** antes × depois | **0 campos alterados**, 300 negócios, 15 colunas — critério de aceite |
+| 7 | adaptador da coleta na posição assimétrica | workflow descartável com os nós REAIS: 2 páginas, **299 linhas** |
+| 8 | o adaptador roda uma vez só, não por item | o stand-in do `Microsoft Reunioes` emitiu **3 itens** e a saída foi 299, não 897 |
+
+**O que NÃO foi verificado:** a coleta não foi executada de ponta a ponta. O webhook dela usa
+uma credencial (`Defenz Webhook Auth - dashboard-metricas`) que eu não tenho, e o cron das 18h
+já tinha rodado quando a mudança entrou. O item 7 cobre a parte nova (adaptador + chamada do
+sub) usando os nós reais, e o item 4 cobre o mesmo sub-workflow em produção — mas a primeira
+execução programada da coleta é a das **6h**. Ver §12.
+
+## 11. A planilha vai ser extinta — e isso mata o D3
+
+Decisão do Marcos em 27/08: quando a refatoração fechar, a próxima spec **extingue a planilha e
+grava direto no Neon**.
+
+Isso muda o que fazer com o `continueOnFail: true` do `Sheets Deals`. Eu tinha proposto
+rependurar o ramo do Neon direto no formatador, para poder deixar a planilha falhar alto sem
+derrubar a ingestão. **Com a planilha saindo do caminho, esse rewiring vira trabalho jogado
+fora** — o problema (Neon pendurado depois da planilha) desaparece sozinho.
+
+Então D3 não é "fazer depois": é **não fazer**. O que fica na fila é a spec da extinção, que já
+tem meio caminho andado em `feature-migracao-neon-fase2.md` (ler do Neon, v3 aprovada em 18/08).
+Ler do Neon e parar de escrever no Sheets são as duas metades do mesmo movimento.
+
+## 12. Pendência única
+
+A coleta roda às **6h/12h/18h**. A primeira execução programada depois desta mudança fecha o
+lote. Conferir: execução `success`, `Format Deals Raw` com ~299 itens, e o retrato da aba sem
+diferença. Se algo der errado, o rollback é recolocar o code node antigo — o corpo está em
+`.n8n-backup/QjnzGicZHIPBNN1g.<stamp>.json` e o comportamento está descrito em §0.

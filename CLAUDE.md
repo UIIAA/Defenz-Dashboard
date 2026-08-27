@@ -26,9 +26,11 @@ npm run dev       # Start dev server (Turbopack)
 npm run build     # Production build
 npm run start     # Start production server
 npm run lint      # Run ESLint
+npm test          # Vitest (309 testes)
+npm run test:sql  # Teste de integração do SQL (pula sem PGTEST_URL)
 ```
 
-There are no database commands, no test commands, and no test suite.
+Não há comandos de banco.
 
 ## Architecture
 
@@ -197,6 +199,8 @@ The `DateFilter` component provides preset ranges and a custom calendar picker:
 | `DASHBOARD_PASSWORD` | Yes | Single shared password for dashboard access |
 | `N8N_WEBHOOK_URL` | Yes | Full URL of the N8N webhook that returns sales data |
 | `DATABASE_URL` | Yes | Neon (Postgres) — auth individual, metas por canal e ingestão |
+| `N8N_API_URL` | Só para `sync-n8n-code` | Base da instância n8n (ex.: `https://code.escaladaonline.com.br`) |
+| `N8N_API_KEY` | Só para `sync-n8n-code` | Chave da API do n8n. Usada por `scripts/sync-n8n-code.mjs --check/--push` |
 | `INGEST_TOKEN` | Yes (escrita dupla) | Segredo máquina-a-máquina do `POST /api/ingest`. Mínimo 32 chars. Sem ele a rota fica **fechada** (401). Gerar com `openssl rand -hex 32` |
 
 ## Security
@@ -227,7 +231,9 @@ The application implements several security hardening measures:
 ## Important Notes
 
 - **No database**: All data comes from the N8N webhook. There is no Prisma, no ORM, no database.
-- **No tests**: There is no test suite or test runner configured.
+- **Testes**: vitest (`npm test`). A afirmação anterior de que não havia suíte estava
+  desatualizada. O que NÃO tem cobertura é o front — os testes vivem em `src/lib/**` e em
+  `n8n/format-deals-raw.test.mjs`.
 - **Mock fallback**: When the N8N webhook fails, the dashboard renders mock data rather than showing an error state. The mock data generator is in `Dashboard.tsx` (`generateMockData()`).
 - **Client-side throttle**: Dashboard enforces a 5-second minimum interval between fetches to prevent rapid re-requests.
 - **Consistency warnings**: The dashboard validates data consistency (e.g., `deals_fechados` count vs `clientes_fechados` array length) and shows a warning icon in the header if discrepancies are found.
@@ -255,6 +261,9 @@ The application implements several security hardening measures:
 | Normalização de dimensões | `src/lib/ingest/normalize.ts` |
 | Upserts transacionais (SQL) | `src/lib/ingest/repo.ts` |
 | Comparador de paridade | `src/lib/ingest/paridade.ts` |
+| **Corpo do `Format Deals Raw` (fonte única)** | `n8n/format-deals-raw.mjs` |
+| Testes do formatador | `n8n/format-deals-raw.test.mjs` |
+| Sync/drift-check repo ↔ n8n | `scripts/sync-n8n-code.mjs` |
 | Schema de dados de negócio | `db/migrations/0003_dados_negocio.sql` |
 | Estado do negócio + ficha (f-038) | `src/lib/estado.ts` |
 | Schema estado/ficha no Neon | `db/migrations/0009_estado_negocio.sql` |
@@ -361,7 +370,21 @@ O n8n grava **no Sheets e no Neon**. O **Sheets continua sendo a fonte da verdad
 
 ### N8N Workflow
 
-- ID: `QjnzGicZHIPBNN1g` | 54 nos | Cron 6am/18pm + Webhook + Manual
+- ID: `QjnzGicZHIPBNN1g` | 55 nos | Cron 6h/12h/18h + Webhook + Manual
+
+**`Format Deals Raw` e uma FONTE UNICA desde 27/08/2026** (`feature-format-deals-raw-fonte-unica.md`).
+O corpo NAO mora mais dentro dos workflows: mora em `n8n/format-deals-raw.mjs`, no repo, e roda
+num sub-workflow (`Defenz - Dashboard - Sub - Format Deals Raw`, `pDwyWZau5DwJm6L3`) que os dois
+chamadores executam. **Nao editar o nó pela UI do n8n** — edite o arquivo e rode
+`node scripts/sync-n8n-code.mjs --push`; o `--check` acusa divergencia.
+
+- O nó `Format Deals Raw` dos dois chamadores agora e um `executeWorkflow`. **O NOME tem que
+  continuar esse**: no refresh, `Lote -> Neon: deals` e `Respond` referenciam
+  `$('Format Deals Raw')` — renomear quebra em runtime, nao em validacao.
+- A coleta tem um adaptador `Deals: entrada` antes dele, porque ali a aresta vem do
+  `Microsoft Reunioes` (so sequencia) e as paginas precisam ser buscadas com `$('Zoho Deals')`.
+  No refresh nao ha adaptador: o formatador ja pendura direto no `Zoho Deals`.
+- **Sem sentinela.** Payload vazio escreve NADA nos dois. A linha `id: 'none'` foi removida.
 
 **Janela de coleta INCREMENTAL desde 26/08/2026** (`feature-coleta-incremental.md`). O
 `Definir periodo` nao le mais desde `2025-11-01` a cada execucao: usa **retrolook de 1 dia**

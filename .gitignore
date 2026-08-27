@@ -46,3 +46,6 @@ tasks/
 
 # Superpowers brainstorm (mockups locais)
 .superpowers/
+
+# backups dos workflows n8n antes de refatorar (nao versionar)
+.n8n-backup/
