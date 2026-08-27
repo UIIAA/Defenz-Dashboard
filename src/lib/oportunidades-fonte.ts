@@ -19,8 +19,12 @@ import type { RawDeal } from './types';
  *
  * Os três da f-038 seguem o mesmo caminho da temperatura pelo mesmo motivo: nenhum deles tem
  * coluna na aba `deals`, e o nó `Sheets Deals` tem `continueOnFail: true`, então coluna
- * ausente é descartada EM SILÊNCIO. O item continua carregando o campo até o `Lote → Neon`,
- * que é como a temperatura já chega hoje.
+ * ausente é descartada EM SILÊNCIO.
+ *
+ * O item continua carregando o campo até o `Lote → Neon`, e isso é fato medido, não suposição:
+ * na execução 95958 do cron (27/08 12h BRT) o `Format Deals Raw`, o `Sheets Deals` e as 299
+ * linhas do lote têm as mesmas 16 chaves, `temperatura` inclusive, contra 15 colunas na aba.
+ * O Sheets repassa o item inteiro adiante.
  */
 interface CamposNeon {
   temperatura: string;

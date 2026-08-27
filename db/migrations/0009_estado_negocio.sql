@@ -14,6 +14,13 @@
 -- transacional por lote de 500 e um CHECK violado abortaria o LOTE INTEIRO, contra o
 -- contrato de rejeitar e reportar linha a linha. Estado desconhecido vira '' na tela.
 --
+-- COMO O CAMPO CHEGA AQUI SEM COLUNA NA ABA: o nó `Sheets Deals` repassa o ITEM INTEIRO
+-- adiante, não o que a aba aceitou. Não é inferência, foi medido na execução 95958 do cron
+-- (27/08 12h BRT): `Format Deals Raw`, `Sheets Deals` e as 299 linhas do lote têm as mesmas 16
+-- chaves, `temperatura` inclusive, e a aba tem 15 colunas. Por isso a coluna nova não precisa
+-- ser criada à mão no cabeçalho, que é o passo manual cujo esquecimento é descartado em
+-- silêncio por causa do `continueOnFail: true`.
+--
 -- `vencimento_licenca` é `date` e NÃO texto, de propósito. A spec v1 previa texto livre
 -- ("nov/2026", "2027") porque a fonte seria a prosa do `Resultados`; com o campo do Zoho
 -- como fonte, o dado nasce estruturado e a janela dos 90 dias vira comparação de data, não
