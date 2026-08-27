@@ -12,6 +12,7 @@ import {
   type Estado,
   type Posse,
 } from './estado';
+import { nomeDono } from './donos';
 import type { RawDeal } from './types';
 
 export type Temperatura = 'quente' | 'morno' | 'frio';
@@ -59,6 +60,8 @@ export interface Oportunidade {
   dias_para_vencer: number | null;
   /** Vencimento em até 90 dias (ou já vencido). Marcador, não é um 12º estado. */
   janela: boolean;
+  /** Dono do negócio, já traduzido para o nome que a casa usa (src/lib/donos.ts). */
+  dono: string;
   // SEM comissao_valor: a tela é aberta ao time (spec §5.2) e o campo é margem da Defenz.
 }
 
@@ -123,6 +126,7 @@ export function computeOportunidades(
       vencimento: venc,
       dias_para_vencer: dias,
       janela: naJanela(dias),
+      dono: nomeDono(d.owner_id, d.owner_nome),
     });
   }
 

@@ -87,6 +87,9 @@ export interface RawDeal {
   estado_negocio?: string;
   antivirus_atual?: string;
   vencimento_licenca?: string;
+  /** `Owner.id` e `Owner.name` do Zoho. Ver src/lib/donos.ts para o mapa de exibição. */
+  owner_id?: string;
+  owner_nome?: string;
   // FOOTGUN (feature-016 eval): estas TRÊS colunas abaixo continuam NÃO exportadas pela
   // aba `deals`. Compilam mas leem undefined → métricas que dependem delas
   // (computeComissaoOwnerCanal, computeRenovacoesVencidas) silenciosamente dão vazio/0.

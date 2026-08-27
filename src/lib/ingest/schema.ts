@@ -231,6 +231,8 @@ const DEFS: Record<Tabela, DefTabela> = {
       // o valor; estado fora da lista dos 11 vira '' na tela (ver src/lib/estado.ts), não erro
       // de ingestão — o mesmo tratamento que a temperatura recebe.
       ['vencimento_licenca', 'vencimento_licenca', data],
+      ['owner_id', 'owner_id', texto],
+      ['owner_nome', 'owner_nome', texto],
       ['estado_negocio', 'estado_negocio', texto],
       ['antivirus_atual', 'antivirus_atual', texto],
     ],

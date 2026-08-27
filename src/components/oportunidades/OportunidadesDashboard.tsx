@@ -38,8 +38,6 @@ const POSSE_COR: Record<Posse | '', string> = {
   '': 'text-slate-400',
 };
 
-const SEM_ESTADO = 'sem estado';
-
 const ATIVO: Record<Filtro, string> = {
   quente: 'border-red-300 bg-red-50 text-red-800',
   morno: 'border-amber-300 bg-amber-50 text-amber-800',
@@ -79,9 +77,17 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-800 font-medium truncate">{o.nome}</p>
           <p className="text-xs text-slate-400 truncate">
-            <span className={o.estado ? `font-medium ${POSSE_COR[o.posse]}` : 'italic'}>
-              {o.estado || SEM_ESTADO}
-            </span>
+            {/* O DONO ocupa o lugar onde antes se lia 'sem estado'. Enquanto a rotina da
+                f-038 não roda, o estado é vazio em todos os cards, e 'sem estado' era um
+                rótulo que gastava a linha sem informar nada. De quem é o negócio informa
+                sempre. Quando o estado chegar, os dois convivem. */}
+            <span className="font-medium text-slate-600">{o.dono}</span>
+            {o.estado && (
+              <>
+                {' · '}
+                <span className={`font-medium ${POSSE_COR[o.posse]}`}>{o.estado}</span>
+              </>
+            )}
             {' · '}
             {o.stage}
             {' · '}
@@ -166,15 +172,24 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
  */
 function CabecalhoGrupo({ posse, n, valor }: { posse: Posse | ''; n: number; valor: number }) {
   return (
-    <div className="flex items-baseline gap-2 pt-4 pb-1">
-      <span className={`text-xs font-semibold uppercase tracking-wide ${POSSE_COR[posse]}`}>
-        {posse === '' ? 'Sem estado do negócio' : POSSE_TITULO[posse]}
-      </span>
-      <span className="text-xs text-slate-400">
-        {n} {n === 1 ? 'negócio' : 'negócios'}
-      </span>
-      {valor > 0 && (
-        <span className="text-xs font-mono text-slate-400">{formatCurrency(valor)}</span>
+    <div className="pt-4 pb-1">
+      <div className="flex items-baseline gap-2">
+        <span className={`text-xs font-semibold uppercase tracking-wide ${POSSE_COR[posse]}`}>
+          {posse === '' ? 'Ainda sem estado do negócio' : POSSE_TITULO[posse]}
+        </span>
+        <span className="text-xs text-slate-400">
+          {n} {n === 1 ? 'negócio' : 'negócios'}
+        </span>
+        {valor > 0 && (
+          <span className="text-xs font-mono text-slate-400">{formatCurrency(valor)}</span>
+        )}
+      </div>
+      {/* Sem esta linha, "sem estado" parece um diagnóstico do negócio quando na verdade é
+          uma etapa que ainda não rodou. */}
+      {posse === '' && (
+        <p className="text-xs text-slate-400">
+          a rotina que diz onde o negócio parou ainda não classificou estes
+        </p>
       )}
     </div>
   );

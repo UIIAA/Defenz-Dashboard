@@ -27,23 +27,28 @@ interface CamposNeon {
   estado_negocio: string | null;
   antivirus_atual: string | null;
   vencimento_licenca: string | null;
+  owner_id: string | null;
+  owner_nome: string | null;
 }
 
 async function camposPorId(): Promise<Map<string, CamposNeon>> {
   const linhas = (await db()`
-    select id, temperatura, estado_negocio, antivirus_atual,
+    select id, temperatura, estado_negocio, antivirus_atual, owner_id, owner_nome,
            to_char(vencimento_licenca, 'YYYY-MM-DD') as vencimento_licenca
     from deals
     where temperatura is not null and temperatura <> ''
        or estado_negocio is not null and estado_negocio <> ''
        or antivirus_atual is not null and antivirus_atual <> ''
        or vencimento_licenca is not null
+       or owner_id is not null and owner_id <> ''
   `) as {
     id: string;
     temperatura: string | null;
     estado_negocio: string | null;
     antivirus_atual: string | null;
     vencimento_licenca: string | null;
+    owner_id: string | null;
+    owner_nome: string | null;
   }[];
   return new Map(
     linhas.map((l) => [
@@ -56,6 +61,8 @@ async function camposPorId(): Promise<Map<string, CamposNeon>> {
         estado_negocio: l.estado_negocio,
         antivirus_atual: l.antivirus_atual,
         vencimento_licenca: l.vencimento_licenca,
+        owner_id: l.owner_id,
+        owner_nome: l.owner_nome,
       },
     ])
   );
@@ -82,6 +89,8 @@ export async function carregarOportunidades(hoje: string): Promise<Oportunidades
       estado_negocio: c.estado_negocio ?? undefined,
       antivirus_atual: c.antivirus_atual ?? undefined,
       vencimento_licenca: c.vencimento_licenca ?? undefined,
+      owner_id: c.owner_id ?? undefined,
+      owner_nome: c.owner_nome ?? undefined,
     };
   });
 

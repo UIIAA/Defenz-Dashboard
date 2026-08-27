@@ -87,6 +87,8 @@ const DEFS: Record<Tabela, DefSQL> = {
       txt('temperatura'),
       // feature-038 — 0009_estado_negocio.sql
       { campo: 'vencimento_licenca', tipo: 'date' },
+      txt('owner_id'),
+      txt('owner_nome'),
       txt('estado_negocio'),
       txt('antivirus_atual'),
       { campo: 'created_time', tipo: 'date' },

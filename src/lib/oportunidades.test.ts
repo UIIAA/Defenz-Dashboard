@@ -111,6 +111,20 @@ describe("computeOportunidades", () => {
     ]);
   });
 
+  it("traduz o dono do negócio e não deixa a linha sem ninguém", () => {
+    const r = computeOportunidades(
+      [
+        { id: "a", nome: "Do Leonardo", stage: "Em negociação", valor: 3,
+          owner_id: "7067822000000576001", owner_nome: "vendor 2" },
+        { id: "b", nome: "Do Gustavo", stage: "Em negociação", valor: 2,
+          owner_id: "7067822000000743027", owner_nome: "Gustavo Figueira" },
+        { id: "c", nome: "Órfão", stage: "Em negociação", valor: 1 },
+      ],
+      HOJE
+    );
+    expect(r.itens.map((x) => x.dono)).toEqual(["Leonardo", "Gustavo F", "sem dono"]);
+  });
+
   it("estado fora da lista dos 11 vira vazio e o card não some da tela", () => {
     const r = computeOportunidades(
       [{ id: "x", nome: "n", stage: "Em negociação", estado_negocio: "Estado inventado" }],
