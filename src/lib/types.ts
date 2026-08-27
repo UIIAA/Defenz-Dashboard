@@ -80,6 +80,13 @@ export interface RawDeal {
   // NÃO usar `Classificacao_IA`: é do ramo de IA desligado em 12/08 e seria um segundo dono
   // da mesma verdade.
   temperatura?: string;
+  // feature-038 — estado do negócio e ficha do ambiente.
+  // `vencimento_licenca` sai de `Vencimeno_da_licen_a` (o typo É o api_name real no Zoho), que
+  // é `date` lá: chega como 'YYYY-MM-DD'. `estado_negocio` e `antivirus_atual` são campos
+  // novos, preenchidos pela rotina da f-037/038 no Chief, e nascem vazios.
+  estado_negocio?: string;
+  antivirus_atual?: string;
+  vencimento_licenca?: string;
   // FOOTGUN (feature-016 eval): estas TRÊS colunas abaixo continuam NÃO exportadas pela
   // aba `deals`. Compilam mas leem undefined → métricas que dependem delas
   // (computeComissaoOwnerCanal, computeRenovacoesVencidas) silenciosamente dão vazio/0.

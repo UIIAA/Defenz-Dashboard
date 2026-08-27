@@ -13,33 +13,79 @@ import { fetchFromSheets } from './sheets';
 import { computeOportunidades, type OportunidadesResult } from './oportunidades';
 import type { RawDeal } from './types';
 
-/** Temperatura por deal_id, direto do Neon. Só os que têm valor — a maioria não tem. */
-async function temperaturaPorId(): Promise<Map<string, string>> {
+/**
+ * O que o dashboard lê do NEON e não da planilha: temperatura (f-semaforo) e, desde a
+ * feature-038, estado do negócio, antivírus atual e vencimento da licença.
+ *
+ * Os três da f-038 seguem o mesmo caminho da temperatura pelo mesmo motivo: nenhum deles tem
+ * coluna na aba `deals`, e o nó `Sheets Deals` tem `continueOnFail: true`, então coluna
+ * ausente é descartada EM SILÊNCIO. O item continua carregando o campo até o `Lote → Neon`,
+ * que é como a temperatura já chega hoje.
+ */
+interface CamposNeon {
+  temperatura: string;
+  estado_negocio: string | null;
+  antivirus_atual: string | null;
+  vencimento_licenca: string | null;
+}
+
+async function camposPorId(): Promise<Map<string, CamposNeon>> {
   const linhas = (await db()`
-    select id, temperatura from deals
+    select id, temperatura, estado_negocio, antivirus_atual,
+           to_char(vencimento_licenca, 'YYYY-MM-DD') as vencimento_licenca
+    from deals
     where temperatura is not null and temperatura <> ''
-  `) as { id: string; temperatura: string }[];
-  return new Map(linhas.map((l) => [String(l.id), String(l.temperatura)]));
+       or estado_negocio is not null and estado_negocio <> ''
+       or antivirus_atual is not null and antivirus_atual <> ''
+       or vencimento_licenca is not null
+  `) as {
+    id: string;
+    temperatura: string | null;
+    estado_negocio: string | null;
+    antivirus_atual: string | null;
+    vencimento_licenca: string | null;
+  }[];
+  return new Map(
+    linhas.map((l) => [
+      String(l.id),
+      {
+        // `to_char` já devolve 'YYYY-MM-DD'. NÃO usar o `Date` que o driver criaria para
+        // uma coluna `date`: ele nasce em UTC e, lido em São Paulo, volta um dia — o mesmo
+        // erro de fuso que já mordeu a janela de coleta.
+        temperatura: String(l.temperatura ?? ''),
+        estado_negocio: l.estado_negocio,
+        antivirus_atual: l.antivirus_atual,
+        vencimento_licenca: l.vencimento_licenca,
+      },
+    ])
+  );
 }
 
 export async function carregarOportunidades(hoje: string): Promise<OportunidadesResult> {
   // Em paralelo: uma bate no gviz, a outra no Neon. Não dependem uma da outra.
-  const [deals, temps] = await Promise.all([
+  const [deals, campos] = await Promise.all([
     fetchFromSheets('deals') as Promise<RawDeal[]>,
-    temperaturaPorId().catch((e) => {
-      // Neon fora não pode derrubar a tela: sem temperatura, todas cinzas — que é o mesmo
-      // estado de quando ninguém classificou. Degrada, não quebra.
-      console.error('oportunidades: temperatura do Neon indisponível', e);
-      return new Map<string, string>();
+    camposPorId().catch((e) => {
+      // Neon fora não pode derrubar a tela: sem esses campos, tudo cinza e 'em validação' —
+      // que é o mesmo estado de quando ninguém classificou. Degrada, não quebra.
+      console.error('oportunidades: campos do Neon indisponíveis', e);
+      return new Map<string, CamposNeon>();
     }),
   ]);
 
-  const comTemp = deals.map((d) => {
-    const t = temps.get(String(d.id ?? ''));
-    return t ? { ...d, temperatura: t } : d;
+  const enriquecidos = deals.map((d) => {
+    const c = campos.get(String(d.id ?? ''));
+    if (!c) return d;
+    return {
+      ...d,
+      temperatura: c.temperatura || d.temperatura,
+      estado_negocio: c.estado_negocio ?? undefined,
+      antivirus_atual: c.antivirus_atual ?? undefined,
+      vencimento_licenca: c.vencimento_licenca ?? undefined,
+    };
   });
 
-  return computeOportunidades(comTemp, hoje);
+  return computeOportunidades(enriquecidos, hoje);
 }
 
 /** Data de hoje em São Paulo — `dias_sem_toque` é contagem de dias corridos. */

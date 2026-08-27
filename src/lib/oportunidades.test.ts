@@ -49,10 +49,76 @@ describe("computeOportunidades", () => {
     expect(r.itens.map((x) => x.id)).not.toContain("5");
   });
 
-  it("não classificados vêm PRIMEIRO, depois por valor", () => {
+  // MUDOU na feature-038. Antes o card sem TEMPERATURA vinha no topo, para a tela cobrar.
+  // Agora a ordem é por POSSE (parado, nossa, cliente, e sem estado por último), e a cobrança
+  // vive nos contadores do cabeçalho. Motivo em computeOportunidades: o bucket "sem estado"
+  // nasce com os 68 cards e enterraria os R$ 93 mil de "parado".
+  it("ordena por posse e, dentro do grupo, por valor decrescente", () => {
+    const r = computeOportunidades(
+      [
+        { id: "cli", nome: "Cliente pequeno", stage: "Em negociação", valor: 100, estado_negocio: "Proposta em análise" },
+        { id: "sem", nome: "Sem estado, o maior de todos", stage: "Em negociação", valor: 99000 },
+        { id: "par1", nome: "Parado grande", stage: "Em negociação", valor: 5000, estado_negocio: "Bloqueio declarado" },
+        { id: "nos", nome: "Nossa", stage: "Em negociação", valor: 8000, estado_negocio: "Reunião a agendar" },
+        { id: "par2", nome: "Parado pequeno", stage: "Em negociação", valor: 900, estado_negocio: "Contato sem retorno" },
+      ],
+      HOJE
+    );
+    expect(r.itens.map((x) => x.id)).toEqual(["par1", "par2", "nos", "cli", "sem"]);
+    expect(r.grupos).toEqual([
+      { posse: "parado", n: 2, valor: 5900 },
+      { posse: "nossa", n: 1, valor: 8000 },
+      { posse: "cliente", n: 1, valor: 100 },
+      { posse: "", n: 1, valor: 99000 },
+    ]);
+    expect(r.sem_estado).toBe(1);
+  });
+
+  it("conta quem está sem temperatura, mesmo sem usar isso para ordenar", () => {
     const r = computeOportunidades(deals, HOJE);
-    expect(r.itens.map((x) => x.id)).toEqual(["1", "2", "3"]);
+    expect(r.total).toBe(3);
     expect(r.sem_classificacao).toBe(2);
+    // Nenhum deles tem estado ainda: é o retrato de antes de a rotina do Chief rodar.
+    expect(r.sem_estado).toBe(3);
+    expect(r.grupos).toEqual([{ posse: "", n: 3, valor: 39500 }]);
+    // Sem estado, o desempate é o valor.
+    expect(r.itens.map((x) => x.id)).toEqual(["1", "3", "2"]);
+  });
+
+  it("a ficha do ambiente e a janela dos 90 dias saem do campo do Zoho", () => {
+    const r = computeOportunidades(
+      [
+        { id: "a", nome: "Vence dentro da janela", stage: "Proposta Enviada", valor: 700,
+          estado_negocio: "Proposta em análise", antivirus_atual: "Acronis",
+          vencimento_licenca: "2026-10-01", licencas: 8 },
+        { id: "b", nome: "Vence longe", stage: "Proposta Enviada", valor: 7000,
+          estado_negocio: "Proposta em análise", vencimento_licenca: "2027-02-01" },
+        { id: "c", nome: "Sem vencimento", stage: "Proposta Enviada", valor: 70,
+          estado_negocio: "Proposta em análise" },
+      ],
+      "2026-08-27"
+    );
+    const [b, a, c] = r.itens; // ordenados por valor dentro do grupo 'cliente'
+    expect(a.janela).toBe(true);
+    expect(a.dias_para_vencer).toBe(35);
+    expect(a.antivirus_atual).toBe("Acronis");
+    expect(b.janela).toBe(false);
+    expect(c.janela).toBe(false);
+    expect(c.dias_para_vencer).toBeNull();
+    expect(c.antivirus_atual).toBeNull();
+    expect(r.janela).toEqual([
+      { id: "a", nome: "Vence dentro da janela", valor: 700, vencimento: "2026-10-01" },
+    ]);
+  });
+
+  it("estado fora da lista dos 11 vira vazio e o card não some da tela", () => {
+    const r = computeOportunidades(
+      [{ id: "x", nome: "n", stage: "Em negociação", estado_negocio: "Estado inventado" }],
+      HOJE
+    );
+    expect(r.total).toBe(1);
+    expect(r.itens[0].estado).toBe("");
+    expect(r.itens[0].posse).toBe("");
   });
 
   it("valor fora do picklist vira vazio, não quebra", () => {

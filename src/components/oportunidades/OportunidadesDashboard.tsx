@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ChevronDown, RefreshCw } from 'lucide-react';
+import { AlertCircle, ChevronDown, Clock, RefreshCw } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { SemaforoDot, TEMPERATURA_NOME } from './SemaforoDot';
+import { POSSE_TITULO, EM_VALIDACAO, montaFicha, type Posse } from '@/lib/estado';
 import type { Oportunidade, OportunidadesResult, Temperatura } from '@/lib/oportunidades';
 import { ErrorState } from '@/components/shared/ErrorState';
 
@@ -27,6 +28,17 @@ const BARRA: Record<Temperatura | '', string> = {
   frio: 'border-l-blue-500',
   '': 'border-l-slate-200',
 };
+
+// feature-038 — cor do grupo de posse. Cinza para "sem estado" de propósito: é ausência de
+// informação, não uma quarta categoria de negócio.
+const POSSE_COR: Record<Posse | '', string> = {
+  parado: 'text-red-700',
+  nossa: 'text-slate-900',
+  cliente: 'text-slate-500',
+  '': 'text-slate-400',
+};
+
+const SEM_ESTADO = 'sem estado';
 
 const ATIVO: Record<Filtro, string> = {
   quente: 'border-red-300 bg-red-50 text-red-800',
@@ -53,6 +65,11 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
   const andamento = o.ultimo_andamento;
   const temMais = Boolean(andamento && andamento.length > 170);
 
+  const ficha = montaFicha(o.licencas, o.antivirus_atual, o.vencimento);
+  // Vencida conta como dentro da janela (ver naJanela em estado.ts), mas quem lê precisa
+  // saber qual dos dois é: "vence" e "venceu" pedem ações diferentes.
+  const vencida = o.dias_para_vencer !== null && o.dias_para_vencer < 0;
+
   return (
     <div
       className={`rounded-r-lg border-l-[3px] bg-white/70 py-2.5 pl-3 pr-1 transition-colors hover:bg-slate-50/80 ${BARRA[o.temperatura]}`}
@@ -61,9 +78,43 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
         <SemaforoDot temperatura={o.temperatura} />
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-800 font-medium truncate">{o.nome}</p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 truncate">
+            <span className={o.estado ? `font-medium ${POSSE_COR[o.posse]}` : 'italic'}>
+              {o.estado || SEM_ESTADO}
+            </span>
+            {' · '}
             {o.stage}
-            {o.licencas > 0 && ` · ${o.licencas} lic`}
+            {' · '}
+            <span className={ficha.licencas === EM_VALIDACAO ? 'italic' : undefined}>
+              {ficha.licencas}
+            </span>
+            {' · '}
+            <span className={ficha.antivirus === EM_VALIDACAO ? 'italic' : undefined}>
+              {ficha.antivirus}
+            </span>
+            {' · '}
+            <span
+              className={
+                o.janela
+                  ? 'font-medium text-amber-700'
+                  : ficha.vencimento === EM_VALIDACAO
+                    ? 'italic'
+                    : undefined
+              }
+              title={
+                o.dias_para_vencer === null
+                  ? undefined
+                  : vencida
+                    ? `licença vencida há ${Math.abs(o.dias_para_vencer)} dias`
+                    : `vence em ${o.dias_para_vencer} dias`
+              }
+            >
+              {o.janela && <Clock size={10} className="mb-px mr-1 inline" aria-hidden />}
+              {/* Sem data, o rótulo some: "vence em validação" não quer dizer nada. */}
+              {ficha.vencimento === EM_VALIDACAO
+                ? `vencimento ${EM_VALIDACAO}`
+                : `${vencida ? 'venceu' : 'vence'} ${ficha.vencimento}`}
+            </span>
           </p>
         </div>
         <span
@@ -103,6 +154,27 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
             </button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * feature-038 §5 — a lista é agrupada por POSSE, maior valor primeiro dentro do grupo.
+ * O cabeçalho carrega contagem e dinheiro porque é isso que decide o que olhar primeiro:
+ * "parado, 13 negócios, R$ 93.518" é a frase que faz alguém agir.
+ */
+function CabecalhoGrupo({ posse, n, valor }: { posse: Posse | ''; n: number; valor: number }) {
+  return (
+    <div className="flex items-baseline gap-2 pt-4 pb-1">
+      <span className={`text-xs font-semibold uppercase tracking-wide ${POSSE_COR[posse]}`}>
+        {posse === '' ? 'Sem estado do negócio' : POSSE_TITULO[posse]}
+      </span>
+      <span className="text-xs text-slate-400">
+        {n} {n === 1 ? 'negócio' : 'negócios'}
+      </span>
+      {valor > 0 && (
+        <span className="text-xs font-mono text-slate-400">{formatCurrency(valor)}</span>
       )}
     </div>
   );
@@ -168,6 +240,20 @@ export const OportunidadesDashboard = () => {
 
   const valorVisivel = useMemo(() => visiveis.reduce((s, o) => s + o.valor, 0), [visiveis]);
 
+  // Os itens já vêm ordenados por posse do servidor (estado.ts/ORDEM_POSSE), então basta
+  // quebrar na troca. A contagem é recalculada AQUI, e não lida de `data.grupos`, porque o
+  // chip de temperatura filtra a lista: dizer "13 negócios" num grupo com 2 linhas visíveis
+  // seria mentira.
+  const grupos = useMemo(() => {
+    const out: { posse: Posse | ''; itens: Oportunidade[] }[] = [];
+    for (const o of visiveis) {
+      const ultimo = out[out.length - 1];
+      if (ultimo && ultimo.posse === o.posse) ultimo.itens.push(o);
+      else out.push({ posse: o.posse, itens: [o] });
+    }
+    return out;
+  }, [visiveis]);
+
   // Contagem por chip — o número muda quando o dado muda, e é o que deixa claro que o chip
   // é um controle e não um rótulo.
   const contagem = useMemo(() => {
@@ -220,6 +306,40 @@ export const OportunidadesDashboard = () => {
         </div>
       )}
 
+      {/* feature-038 — só aparece quando a rotina classificou PARTE do pipe. Enquanto ela não
+          roda, sem_estado === total e um banner "68 de 68" todo dia é ruído: não é um card
+          esquecido, é a feature ainda não ligada. */}
+      {data.sem_estado > 0 && data.sem_estado < data.total && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-slate-500" />
+          <p className="text-sm text-slate-700">
+            <strong className="font-semibold">
+              {data.sem_estado} de {data.total}
+            </strong>{' '}
+            sem estado do negócio. A rotina deixa em branco quando o texto do{' '}
+            <span className="font-mono text-xs">Resultados</span> não sustenta a leitura, e isso
+            é uma pergunta para o vendedor, não um erro.
+          </p>
+        </div>
+      )}
+
+      {data.janela.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <Clock size={15} aria-hidden />
+            Vencendo em até 90 dias: {data.janela.length} ·{' '}
+            <span className="font-mono">
+              {formatCurrency(data.janela.reduce((s, x) => s + x.valor, 0))}
+            </span>
+          </p>
+          {/* Numa revenda de antivírus a data de vencimento é o gatilho do negócio, então ela
+              sobe para o topo em vez de ficar só na linha do card. */}
+          <p className="mt-1 text-xs text-amber-800">
+            {data.janela.map((x) => `${x.nome} (${x.vencimento.slice(5, 7)}/${x.vencimento.slice(0, 4)})`).join(' · ')}
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-slate-400 mr-0.5">Filtrar</span>
         {CHIPS.map((f) => {
@@ -257,9 +377,20 @@ export const OportunidadesDashboard = () => {
         )}
       </div>
 
-      <div className="space-y-1.5">
-        {visiveis.map((o) => (
-          <LinhaOportunidade key={o.id} o={o} />
+      <div>
+        {grupos.map((g) => (
+          <div key={g.posse || 'sem-estado'}>
+            <CabecalhoGrupo
+              posse={g.posse}
+              n={g.itens.length}
+              valor={g.itens.reduce((s, x) => s + x.valor, 0)}
+            />
+            <div className="space-y-1.5">
+              {g.itens.map((o) => (
+                <LinhaOportunidade key={o.id} o={o} />
+              ))}
+            </div>
+          </div>
         ))}
         {visiveis.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">Nenhum negócio com esse filtro.</p>

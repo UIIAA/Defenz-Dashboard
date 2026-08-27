@@ -256,6 +256,8 @@ The application implements several security hardening measures:
 | Upserts transacionais (SQL) | `src/lib/ingest/repo.ts` |
 | Comparador de paridade | `src/lib/ingest/paridade.ts` |
 | Schema de dados de negócio | `db/migrations/0003_dados_negocio.sql` |
+| Estado do negócio + ficha (f-038) | `src/lib/estado.ts` |
+| Schema estado/ficha no Neon | `db/migrations/0009_estado_negocio.sql` |
 | Backfill histórico | `scripts/backfill-neon.mjs` |
 | Logout endpoint | `src/app/api/auth/logout/route.ts` |
 | Route group layout | `src/app/(dashboard)/layout.tsx` |

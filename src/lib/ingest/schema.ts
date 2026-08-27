@@ -224,6 +224,15 @@ const DEFS: Record<Tabela, DefTabela> = {
       // feature-semaforo-oportunidades — normalizado na origem pelo `Format Deals Raw`
       // ('quente'|'morno'|'frio'|''). Aqui é só texto: valor torto vira '' antes de chegar.
       ['temperatura', 'temperatura', texto],
+      // feature-038 — ver db/migrations/0009_estado_negocio.sql.
+      // `vencimento_licenca` sai do campo `Vencimeno_da_licen_a` do Zoho, que é `date` lá e
+      // `date` aqui: chega como 'YYYY-MM-DD' e o coercer `data` rejeita qualquer outra coisa.
+      // `estado_negocio` e `antivirus_atual` são texto porque a rotina do Chief é quem manda
+      // o valor; estado fora da lista dos 11 vira '' na tela (ver src/lib/estado.ts), não erro
+      // de ingestão — o mesmo tratamento que a temperatura recebe.
+      ['vencimento_licenca', 'vencimento_licenca', data],
+      ['estado_negocio', 'estado_negocio', texto],
+      ['antivirus_atual', 'antivirus_atual', texto],
     ],
     pos: (bruta, saida) => {
       saida.tags = splitTags(typeof bruta.tags === 'string' ? bruta.tags : null);
