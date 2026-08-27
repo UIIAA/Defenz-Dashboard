@@ -38,12 +38,11 @@ haveria. É o melhor momento possível para fazer.
 `vencimento_licenca`, inclusive na sentinela da coleta, e `Vencimeno_da_licen_a` já está no
 `fields` dos dois nós `Zoho Deals`. Nada da f-038 se perde aqui.
 
-**O `Sheets Deals` repassa os itens inteiros.** Isso importa porque na coleta o
-`Lote → Neon: deals` lê `$input.all()` — ou seja, a saída do Sheets, não a do formatador.
-Conferi a execução do cron `95958` (27/08 12h BRT): o `Format Deals Raw`, o `Sheets Deals` e as
-299 linhas do lote têm **exatamente as mesmas 16 chaves**, `temperatura` inclusive — e
-`temperatura` **não é coluna da aba** (a aba tem 15 colunas). Ou seja, campo que não vira coluna
-atravessa mesmo assim até o Neon. Campo novo no formatador chega ao Neon pelos dois caminhos.
+**~~O `Sheets Deals` repassa os itens inteiros.~~ ERRADO — corrigido em §13.** A execução
+`95958` não continha o caso discriminante (todo campo emitido pelo formatador estava também no
+mapeamento do nó). A execução `96102` mostrou a regra real: o nó do Google Sheets emite **as
+colunas do MAPEAMENTO DO NÓ**, não o item inteiro. Ver §13 — isso escondia um campo da f-038
+chegando vazio ao Neon pelo cron.
 
 **O cron está rodando.** As últimas execuções programadas — 09:00Z, 15:00Z, 21:00Z = 6h/12h/18h
 BRT — estão todas `success`. Isso fecha a pendência registrada no handoff da coleta incremental
@@ -332,3 +331,56 @@ A coleta roda às **6h/12h/18h**. A primeira execução programada depois desta 
 lote. Conferir: execução `success`, `Format Deals Raw` com ~299 itens, e o retrato da aba sem
 diferença. Se algo der errado, o rollback é recolocar o code node antigo — o corpo está em
 `.n8n-backup/QjnzGicZHIPBNN1g.<stamp>.json` e o comportamento está descrito em §0.
+
+## 13. Correção: o `Sheets Deals` NÃO repassa o item inteiro
+
+Eu afirmei no §0, a partir da execução `95958`, que o nó do Google Sheets repassava o item
+inteiro e que por isso "campo novo no formatador chega ao Neon pelos dois caminhos". **Estava
+errado**, e a afirmação foi usada por outra sessão para transformar uma premissa da f-038 em
+"fato medido" (commit `9d7cf49`) — então ela precisa ser desfeita lá também.
+
+**Por que me enganei:** na `95958` todo campo que o formatador emitia (16) também estava no
+mapeamento do nó (16). Entrada e saída batiam, e eu li isso como passagem transparente. O caso
+que separava as duas hipóteses não existia naquela execução. O que me deu falsa confiança foi a
+`temperatura` — ela sobrevive **não** por o nó ser transparente, mas por estar no *mapeamento*,
+apesar de não existir como coluna na aba.
+
+**A regra real,** medida na execução `96102`, onde o formatador emitia 19 campos:
+
+| ponto | chaves |
+|---|---|
+| `Format Deals Raw` (saída) | 19, com `owner_id`, `owner_nome`, `vencimento_licenca` |
+| `Sheets Deals` (saída) | **16** — os três acima sumiram |
+| mapeamento do nó `Sheets Deals` | exatamente esses 16 |
+
+**O que isso escondia em produção:** o `Lote → Neon: deals` da coleta lia `$input.all()`, que é
+a saída do Sheets. Logo, `vencimento_licenca` — o campo que a f-038 adicionou hoje 16:42 —
+**chegava vazio ao Neon pelo cron**, e só chegava certo pelo refresh (que sempre leu do
+formatador). Ninguém tinha visto porque nenhum cron rodou depois da f-038.
+
+**Conserto aplicado:** o `Lote → Neon: deals` da coleta passou a ler `$('Format Deals Raw')`,
+igual ao refresh. Isso desacopla o Neon do mapeamento da planilha — campo novo passa a chegar
+sem precisar lembrar de mexer em dois lugares — e apaga a assimetria entre os dois workflows.
+
+## 14. D4 (dono) está pronto no n8n e BLOQUEADO no deploy
+
+O lado n8n do dono está feito e verificado: o formatador emite `owner_id`/`owner_nome`, e a
+execução `96102` mostra as 299 linhas do lote com o dono preenchido.
+
+**Mas o dono não aparece no Neon, e não é culpa do n8n.** A branch `feat/auth-individual` está
+**6 commits à frente do `origin`**, e nenhum commit da f-038 foi publicado. O `/api/ingest` que
+roda em `defenz-dashboard.vercel.app` é anterior a esses campos e **ignora campo desconhecido em
+silêncio** — responde `recebidos 299, atualizados 299, rejeitados 0` e descarta.
+
+Medido no Neon (as migrations 0009/0010 **já foram aplicadas** — o banco está à frente do app):
+
+| campo | entrou | preenchido no Neon |
+|---|---|---|
+| `temperatura` | 26/08, **deployado** | **68** |
+| `vencimento_licenca` | 27/08 16:42 | 0 |
+| `owner_id` / `owner_nome` | 27/08 17:41 | 0 |
+| `estado_negocio` | 27/08 (f-038) | 0 |
+
+Ou seja: **toda a f-038 está fora do ar**, não só o dono. O destravamento é um deploy do
+dashboard — decisão do Marcos, não minha. Depois do deploy, o próximo refresh (ou o cron das 6h)
+preenche as colunas sem mais nenhuma mudança de código.

@@ -128,6 +128,17 @@ function formatarDeals(pages) {
       temperatura: normalizaTemperatura(d.Temperatura),
       tags: tags,
       licencas: parseInt(d.N_de_Endpoints, 10) || 0,
+    // feature-038 (dono) — o `Owner` já era pedido ao Zoho no `fields` do nó `Zoho Deals` e
+    // era JOGADO FORA aqui: nenhuma tela sabia de quem era o negócio.
+    //
+    // DOIS ACESSOS EXPLÍCITOS, e não `toStr(d.Owner)`: o `toStr` acima devolve `v.name` quando
+    // recebe objeto, então `toStr(d.Owner)` daria o NOME no lugar do id — e o id é justamente
+    // a metade estável. O nome de exibição do Zoho é editável ("vendor 2" é conta genérica).
+    //
+    // DUAS COLUNAS de propósito: `src/lib/donos.ts` amarra a exibição no id, e guardar o nome
+    // cru é o que faz vendedor novo aparecer na tela antes de alguém cadastrar o id no mapa.
+    owner_id: toStr(d.Owner && d.Owner.id),
+    owner_nome: toStr(d.Owner && d.Owner.name),
       // feature-038 — `Vencimeno_da_licen_a` (o typo E o api_name real) e um campo `date` do
       // Zoho que ja existia e simplesmente nao estava sendo exportado. Preenchido em 11 dos 29
       // cards do pipe em 27/08. E a fonte do vencimento, e o modelo da f-038 so preenche onde

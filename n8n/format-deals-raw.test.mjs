@@ -131,7 +131,31 @@ describe('formatarDeals', () => {
       comissao_valor: 5800, created_time: '2026-08-01', modified_time: '2026-08-20',
       closing_date: '2026-09-30', resultados: '20/08 - ok', temperatura: 'quente',
       tags: '', licencas: 50, vencimento_licenca: '2026-12-31',
+      owner_id: '', owner_nome: '',
     });
+  });
+
+  it('emite o dono como id E nome', () => {
+    const [d] = formatarDeals(pagina([{ ...base, Owner: { id: '7067822000000743027', name: 'Gustavo Figueira', email: 'gustavo@defenz.com.br' } }]));
+    expect(d.owner_id).toBe('7067822000000743027');
+    expect(d.owner_nome).toBe('Gustavo Figueira');
+  });
+
+  it('o id NÃO pode virar o nome — a armadilha do toStr', () => {
+    // `toStr(d.Owner)` devolveria 'Gustavo Figueira' para os DOIS campos, porque o toStr faz
+    // String(v.name) quando recebe objeto. O id é a metade estável (o nome no Zoho é editável),
+    // então trocar um pelo outro quebraria o mapa de src/lib/donos.ts em silêncio.
+    const [d] = formatarDeals(pagina([{ ...base, Owner: { id: '7067822000000576001', name: 'vendor 2' } }]));
+    expect(d.owner_id).toBe('7067822000000576001');
+    expect(d.owner_id).not.toBe(d.owner_nome);
+  });
+
+  it('negócio sem dono devolve os dois vazios, nunca undefined', () => {
+    for (const o of [null, undefined]) {
+      const [d] = formatarDeals(pagina([{ ...base, Owner: o }]));
+      expect(d.owner_id).toBe('');
+      expect(d.owner_nome).toBe('');
+    }
   });
 
   it('comissão é arredondada, não truncada', () => {
