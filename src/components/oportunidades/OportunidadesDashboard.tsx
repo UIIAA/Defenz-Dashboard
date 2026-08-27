@@ -91,11 +91,11 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
             {' · '}
             {o.stage}
             {' · '}
-            <span className={ficha.licencas === EM_VALIDACAO ? 'italic' : undefined}>
+            <span className={ficha.licencas.endsWith(EM_VALIDACAO) ? 'italic' : undefined}>
               {ficha.licencas}
             </span>
             {' · '}
-            <span className={ficha.antivirus === EM_VALIDACAO ? 'italic' : undefined}>
+            <span className={ficha.antivirus.endsWith(EM_VALIDACAO) ? 'italic' : undefined}>
               {ficha.antivirus}
             </span>
             {' · '}
@@ -103,7 +103,7 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
               className={
                 o.janela
                   ? 'font-medium text-amber-700'
-                  : ficha.vencimento === EM_VALIDACAO
+                  : ficha.vencimento.endsWith(EM_VALIDACAO)
                     ? 'italic'
                     : undefined
               }
@@ -117,8 +117,8 @@ function LinhaOportunidade({ o }: { o: Oportunidade }) {
             >
               {o.janela && <Clock size={10} className="mb-px mr-1 inline" aria-hidden />}
               {/* Sem data, o rótulo some: "vence em validação" não quer dizer nada. */}
-              {ficha.vencimento === EM_VALIDACAO
-                ? `vencimento ${EM_VALIDACAO}`
+              {ficha.vencimento.endsWith(EM_VALIDACAO)
+                ? ficha.vencimento
                 : `${vencida ? 'venceu' : 'vence'} ${ficha.vencimento}`}
             </span>
           </p>

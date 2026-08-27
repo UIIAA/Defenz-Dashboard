@@ -146,17 +146,19 @@ describe('ordem dos grupos na tela', () => {
 });
 
 describe('ficha do ambiente', () => {
-  it('nulo vira "em validação", nunca branco', () => {
+  it('nulo vira "em validação" ROTULADO, nunca branco', () => {
+    // Sem rótulo, um card sem nenhum dado vira 'em validação · em validação · em validação'
+    // na linha e ninguém sabe o que está faltando.
     const f = montaFicha(0, null, null);
     expect(f).toEqual({
-      licencas: EM_VALIDACAO,
-      antivirus: EM_VALIDACAO,
-      vencimento: EM_VALIDACAO,
+      licencas: `lic. ${EM_VALIDACAO}`,
+      antivirus: `AV ${EM_VALIDACAO}`,
+      vencimento: `venc. ${EM_VALIDACAO}`,
     });
   });
 
   it('branco e espaço em branco também viram "em validação"', () => {
-    expect(montaFicha(0, '   ', '').antivirus).toBe(EM_VALIDACAO);
+    expect(montaFicha(0, '   ', '').antivirus).toBe(`AV ${EM_VALIDACAO}`);
   });
 
   it('formata o vencimento como mês/ano, que é a granularidade que decide', () => {

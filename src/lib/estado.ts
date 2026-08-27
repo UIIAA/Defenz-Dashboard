@@ -151,14 +151,21 @@ export function mesAno(vencimento: string | null): string {
   return p ? `${MES[p[1] - 1]}/${p[0]}` : EM_VALIDACAO;
 }
 
+/**
+ * O placeholder é ROTULADO ('lic. em validação', e não só 'em validação') porque na linha do
+ * card os três campos aparecem em sequência: sem rótulo, um negócio sem nenhum dado vira
+ * 'em validação · em validação · em validação' e ninguém sabe o que está faltando. É o formato
+ * da §5 da spec.
+ */
 export function montaFicha(
   licencas: number,
   antivirus: string | null,
   vencimento: string | null
 ): Ficha {
+  const venc = mesAno(vencimento);
   return {
-    licencas: licencas > 0 ? `${licencas} lic` : EM_VALIDACAO,
-    antivirus: antivirus && antivirus.trim() ? antivirus.trim() : EM_VALIDACAO,
-    vencimento: mesAno(vencimento),
+    licencas: licencas > 0 ? `${licencas} lic` : `lic. ${EM_VALIDACAO}`,
+    antivirus: antivirus && antivirus.trim() ? antivirus.trim() : `AV ${EM_VALIDACAO}`,
+    vencimento: venc === EM_VALIDACAO ? `venc. ${EM_VALIDACAO}` : venc,
   };
 }
