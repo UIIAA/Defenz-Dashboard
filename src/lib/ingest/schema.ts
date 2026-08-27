@@ -513,10 +513,23 @@ export function validarLote(tabela: Tabela, linhas: unknown[]): ResultadoValidac
     if (!ruim) validas.push(saida);
   });
 
-  // dedupe pela chave natural — a última ocorrência é a mais recente
+  // dedupe pela chave natural, a ultima ocorrencia e a mais recente.
+  //
+  // O separador e NUL ('\u0000') e NAO um espaco, de proposito: ele nao pode aparecer dentro
+  // de um valor. Com espaco, uma chave composta como ['a b', 'c'] e outra como ['a', 'b c']
+  // colidiriam, e uma das duas linhas seria descartada COMO DUPLICADA, perda silenciosa, que
+  // e exatamente o que este modulo existe para impedir. Hoje so `classificacao_ia` tem chave
+  // composta (`lead_id` + `data_classificacao`), e os coercers dos dois recusam espaco, entao
+  // a colisao NAO e alcancavel hoje e nao da para escrever um teste que a demonstre. A garantia
+  // aqui e estrutural: vale para a proxima chave composta que alguem adicionar, cujos campos
+  // podem muito bem ser texto livre. Nao troque este separador por espaco.
+  //
+  // ESCRITO COMO ESCAPE, e nao como o byte cru que estava aqui antes: um NUL literal no fonte
+  // faz o `grep` classificar o arquivo inteiro como binario e devolver ZERO resultados em
+  // silencio, com exit 1. Custou tempo a duas sessoes em 27/08/2026 antes de alguem descobrir.
   const porChave = new Map<string, LinhaValidada>();
   for (const linha of validas) {
-    porChave.set(def.chave.map((c) => String(linha[c])).join(' '), linha);
+    porChave.set(def.chave.map((c) => String(linha[c])).join('\u0000'), linha);
   }
 
   return {

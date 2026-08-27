@@ -28,6 +28,22 @@ Consequência para esta spec: **isto é refatoração pura.** Não há divergên
 não há decisão de "qual das duas está certa". Se fosse feito daqui a três campos, provavelmente
 haveria. É o melhor momento possível para fazer.
 
+**O snapshot desta spec é posterior à f-038.** Baixei os nós às 17:39; a edição da f-038
+(`vencimento_licenca`) entrou ~17:30. As duas cópias no meu snapshot **já têm**
+`vencimento_licenca`, inclusive na sentinela da coleta, e `Vencimeno_da_licen_a` já está no
+`fields` dos dois nós `Zoho Deals`. Nada da f-038 se perde aqui.
+
+**O `Sheets Deals` repassa os itens inteiros.** Isso importa porque na coleta o
+`Lote → Neon: deals` lê `$input.all()` — ou seja, a saída do Sheets, não a do formatador.
+Conferi a execução do cron `95958` (27/08 12h BRT): o `Format Deals Raw`, o `Sheets Deals` e as
+299 linhas do lote têm **exatamente as mesmas 16 chaves**, `temperatura` inclusive — e
+`temperatura` **não é coluna da aba** (a aba tem 15 colunas). Ou seja, campo que não vira coluna
+atravessa mesmo assim até o Neon. Campo novo no formatador chega ao Neon pelos dois caminhos.
+
+**O cron está rodando.** As últimas execuções programadas — 09:00Z, 15:00Z, 21:00Z = 6h/12h/18h
+BRT — estão todas `success`. Isso fecha a pendência registrada no handoff da coleta incremental
+("nenhuma execução programada foi verificada ainda").
+
 Os dois nós `Zoho Deals` também são idênticos: mesma URL, mesmos 18 campos em `fields`,
 `per_page=200`, mesma paginação (`maxRequests: 10`). Ou seja, o insumo é o mesmo nos dois lados.
 
@@ -134,13 +150,26 @@ coleta ser cega.
 
 ## 4. Mudanças nó a nó
 
+> **RESTRIÇÃO QUE MANDA NO DESENHO: o nó de saída precisa continuar se chamando
+> `Format Deals Raw` no `WlTnk2bHWYhibwyG`.** Dois nós do refresh referenciam esse nome:
+>
+> - `Lote → Neon: deals` → `const linhas = $('Format Deals Raw').all()`
+> - `Respond` → também referencia `$('Format Deals Raw')`
+>
+> Renomear ou remover o nó quebra a ingestão do Neon e a resposta do botão de refresh — em
+> tempo de execução, não em validação. Varri os 91 workflows da instância: essas são as duas
+> únicas referências por nome, e as duas estão no refresh.
+
+Portanto: **o nó `executeWorkflow` herda o nome `Format Deals Raw`** (a saída dele é a lista
+formatada, exatamente o que os dois referenciadores esperam), e o adaptador ganha nome novo.
+
 | # | onde | operação |
 |---|---|---|
 | 1 | novo workflow | criar `Sub - Format Deals Raw`, inativo, com trigger + code |
-| 2 | `WlTnk2bHWYhibwyG` | `Format Deals Raw` (code) → vira `Deals: entrada` (adaptador, `__sentinela: false`) |
-| 3 | `WlTnk2bHWYhibwyG` | inserir `Format Deals` (executeWorkflow, `mode: once`, `waitForSubWorkflow: true`) entre o adaptador e `Sheets Deals` |
-| 4 | `QjnzGicZHIPBNN1g` | idem 2, com `__sentinela: true` e `$('Zoho Deals').all()` |
-| 5 | `QjnzGicZHIPBNN1g` | idem 3 |
+| 2 | `WlTnk2bHWYhibwyG` | inserir `Deals: entrada` (adaptador, `__sentinela: false`) entre `Zoho Deals` e o formatador |
+| 3 | `WlTnk2bHWYhibwyG` | `Format Deals Raw` deixa de ser `code` e vira `executeWorkflow` (`mode: once`, `waitForSubWorkflow: true`) — **mesmo nome** |
+| 4 | `QjnzGicZHIPBNN1g` | inserir `Deals: entrada` (adaptador, `__sentinela: true`, `$('Zoho Deals').all()`) entre `Microsoft Reunioes` e o formatador |
+| 5 | `QjnzGicZHIPBNN1g` | idem 3 (mesmo nome, por simetria — ali ninguém referencia, mas divergir os nomes é o começo do próximo bug) |
 
 O adaptador **precisa** ficar em `runOnceForAllItems` (default do code tv2). Se rodar por item,
 na coleta ele multiplicaria pelo número de eventos do calendário.
@@ -210,6 +239,51 @@ recolocar o code node original e apagar os dois nós novos.
 - **D2 — escopo do lote.** Faz só o sub-workflow (§3–4), ou entra junto a fonte no repo com
   `--check` (§5)? Recomendo junto: sozinho, o sub-workflow resolve a edição dupla mas deixa a
   regra de comissão fora do git.
+- **D4 — o dono do negócio (§9).** A sessão paralela pediu para a versão unificada emitir
+  `owner_id`/`owner_nome`. O lado do Dashboard já está commitado esperando. Entra neste lote ou
+  fica separado? Recomendo **entrar junto** — é o mesmo nó, e fazer depois é reabrir o paciente.
 - **D3 — fora de escopo, mas está do lado.** O `Sheets Deals` da coleta segue com
   `continueOnFail: true` — o defeito que produziu os R$ 19.962 de comissão errada em agosto.
   Encosto nele neste lote ou fica para o seu próprio?
+
+## 9. Pedido da sessão paralela: o dono do negócio
+
+A sessão que abriu esta tarefa pediu que a versão unificada emita também o dono, que hoje é
+pedido ao Zoho (`Owner` já está no `fields` dos dois nós, conferido) e **jogado fora** no
+formatador.
+
+```js
+    owner_id:   toStr(d.Owner && d.Owner.id),
+    owner_nome: toStr(d.Owner && d.Owner.name),
+```
+
+Os dois acessos explícitos são necessários, e o alerta dela está certo: o `toStr` que já existe
+faz `String(v.name || v.full_name || '')` quando recebe objeto, então `toStr(d.Owner)` sozinho
+devolveria o **nome** no lugar do id. Na sentinela, `owner_id: '', owner_nome: ''`.
+
+**Conferi o lado do Dashboard antes de aceitar** (está tudo no lugar, commit `978cf56`):
+
+| alegação | verificado |
+|---|---|
+| `db/migrations/0010_dono_deals.sql` | existe, `add column if not exists owner_id/owner_nome` + índice parcial |
+| ingest aceita | `schema.ts:234-235` e `repo.ts:90-91`, os dois como `texto`/`txt` |
+| tela mapeia o id | `src/lib/donos.ts`, com fallback para o nome cru quando o id é desconhecido |
+| `deals` **não** declara `owner` como dimensão | `repo.ts`: `dimensoes: [{ prefixo: 'empresa', … }]` apenas — então owner é coluna simples, **não** gera órfão nem exige linha em `pessoas` (ao contrário de `leads` e `agenda`, que declaram a dimensão `pessoas`) |
+
+Esse último ponto é o que torna o pedido seguro: em `deals` o owner é texto puro, então um id
+novo não é rejeitado nem vira órfão na ingestão.
+
+E o §0 já mostra que campo sem coluna na aba chega ao Neon do mesmo jeito (é o que acontece com
+`temperatura` hoje), então os dois campos vão chegar pelos **dois** caminhos — cron e refresh.
+
+**Um detalhe que o pedido não cobre:** com a unificação, esses dois campos entram **uma vez só**
+no corpo compartilhado. Sem a unificação, entram duas vezes à mão — que é exatamente o problema
+que esta spec existe para acabar. Por isso a recomendação de fazer D4 dentro deste lote, e não
+antes dele.
+
+## 10. Coordenação com a sessão paralela
+
+Combinado para não escrever no mesmo nó ao mesmo tempo: **eu faço os dois passos** (unificação
++ `owner`), depois que o Marcos aprovar esta spec. A sessão paralela não toca nos nós
+`Format Deals Raw` até lá. Se o Marcos preferir o `owner` já, antes da unificação, o caminho é
+ela fazer e eu rebasear a spec — mas aí são duas edições duplas em vez de uma unificada.

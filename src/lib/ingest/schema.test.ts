@@ -233,6 +233,17 @@ describe('classificacao_ia', () => {
   });
 });
 
+describe('o fonte não pode conter byte NUL cru', () => {
+  it('mantém o separador do dedup escrito como escape', async () => {
+    // Um NUL literal no fonte faz o `grep` tratar o arquivo como BINÁRIO e devolver zero
+    // resultados em silêncio, com exit 1. Custou tempo a duas sessões em 27/08/2026 antes de
+    // alguém descobrir por que a busca não achava nada neste arquivo.
+    const { readFile } = await import('node:fs/promises');
+    const fonte = await readFile(new URL('./schema.ts', import.meta.url), 'utf8');
+    expect(fonte.includes(String.fromCharCode(0))).toBe(false);
+  });
+});
+
 describe('agenda', () => {
   it('aceita e converte is_overdue "sim"', () => {
     const r = validarLote('agenda', [
