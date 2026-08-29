@@ -119,6 +119,50 @@ function clientesDe(c: EmailClassificado): string[] {
   return Array.from(new Set(ids));
 }
 
+/**
+ * Nome curto de quem enviou. Vem do E-MAIL, não do usuário do Zoho — decisão do Marcos em
+ * 29/08/2026, e não é preferência: com só dois usuários no Zoho por custo, o CRM
+ * estruturalmente não distingue quem trabalhou. Barbosa não existe lá.
+ * Endereço desconhecido aparece cru, nunca vira "sem remetente".
+ */
+const NOME_CURTO: Record<string, string> = {
+  'gustavo@defenz.com.br': 'Gustavo F',
+  'gustavobarbosa@defenz.com.br': 'Gustavo B',
+  'leonardoalves@defenz.com.br': 'Leonardo',
+  'marcos@defenz.com.br': 'Marcos',
+};
+
+export function nomeRemetente(endereco: string): string {
+  const e = endereco.trim().toLowerCase();
+  return NOME_CURTO[e] ?? endereco.trim();
+}
+
+export interface PropostasPorRemetente {
+  remetente: string;
+  total: number;
+}
+
+/**
+ * Propostas por quem enviou. ATENÇÃO: a soma por pessoa pode passar do total geral — dois
+ * vendedores podem mandar proposta pro mesmo cliente no mesmo dia (medido, Fac. Baiana 25/08).
+ * Isso é atribuição de esforço, não rateio de uma proposta.
+ */
+export function contarPropostasPorRemetente(emails: EmailBruto[]): PropostasPorRemetente[] {
+  const porPessoa = new Map<string, Set<string>>();
+  for (const e of emails) {
+    const c = classificarEmail(e);
+    if (!c.ehProposta) continue;
+    const dia = diaSaoPaulo(e.enviadoEm);
+    const quem = nomeRemetente(e.remetente);
+    const chaves = porPessoa.get(quem) ?? new Set<string>();
+    for (const cliente of clientesDe(c)) chaves.add(`${cliente}|${dia}`);
+    porPessoa.set(quem, chaves);
+  }
+  return Array.from(porPessoa.entries())
+    .map(([remetente, chaves]) => ({ remetente, total: chaves.size }))
+    .sort((a, b) => b.total - a.total || a.remetente.localeCompare(b.remetente));
+}
+
 export function classificarEmail(e: EmailBruto): EmailClassificado {
   const destinatariosCliente = e.destinatarios.filter((d) => {
     const dom = dominioDe(d);

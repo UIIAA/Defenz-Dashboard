@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import {
-  Phone, Presentation, FileText, FlaskConical,
+  Phone, Presentation, FileText, FlaskConical, Send,
   Mail, MessageCircle, Linkedin, Users, RefreshCcw, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -15,6 +15,7 @@ import { DiarioCard } from './DiarioCard';
 import { DayNavigator, type DiarioView } from './DayNavigator';
 import { BaseInstaladaDrawer } from './BaseInstaladaDrawer';
 import { useResumoDiario } from '@/hooks/useResumoDiario';
+import { usePropostasEmail } from '@/hooks/usePropostasEmail';
 import { todayBRT } from '@/lib/resumo-diario';
 import type { ResumoDiario, ResumoSeriePoint, ResumoBaseInstalada } from '@/lib/types';
 
@@ -217,6 +218,11 @@ export const ResumoDiarioDashboard = () => {
 
   useEffect(() => { setQuery(query); }, [query, setQuery]);
 
+  // feature-proposta-email-exchange — só no modo DIA. Em período a chave (cliente, dia) teria
+  // que ser agregada por dia antes de somar, e somar totais diários já deduplicados daria
+  // número maior que a verdade. Enquanto isso não existe, o card não finge cobrir período.
+  const { dados: propostasEmail } = usePropostasEmail(view.kind === 'dia' ? view.data : null);
+
   const onDay = (d: string) => setView({ kind: 'dia', data: d });
   const onRange = (from: string, to: string) => setView({ kind: 'periodo', from, to });
 
@@ -305,8 +311,8 @@ export const ResumoDiarioDashboard = () => {
         </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
-          {/* Row 1 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Row 1 — 5 cards desde feature-proposta-email-exchange (Propostas por e-mail) */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <DiarioCard icon={Phone} highlight title="Ligações"
               value={dash(r.ligacoes.total)}
               subtext={`${nf(r.ligacoes.atendidas)} atendidas (${r.ligacoes.taxa}%)`} />
@@ -318,6 +324,15 @@ export const ResumoDiarioDashboard = () => {
               value={r.propostas.total === null ? null : nf(r.propostas.total)}
               badge={r.propostas.aproximado ? '~' : undefined} badgeTitle="Valor aproximado (backfill)"
               subtext={summarizeVendores(r.propostas.por_vendedor) ?? 'no dia'} />
+            <DiarioCard icon={Send} title="Propostas (e-mail)"
+              value={propostasEmail ? nf(propostasEmail.total) : null}
+              badge={propostasEmail && propostasEmail.quase_propostas > 0 ? '!' : undefined}
+              badgeTitle={propostasEmail ? `${propostasEmail.quase_propostas} PDF(s) externo(s) que a regra não classificou — conferir se a convenção de nome mudou` : undefined}
+              subtext={
+                propostasEmail && propostasEmail.por_remetente.length
+                  ? propostasEmail.por_remetente.map((p) => `${p.remetente} ${p.total}`).join(' · ')
+                  : 'da caixa de enviados'
+              } />
             <DiarioCard icon={FlaskConical} title="POCs Ativas"
               value={r.pocs === null ? null : nf(r.pocs.ativas)}
               subtext={r.pocs && r.pocs.lista.length ? r.pocs.lista.slice(0, 2).join(', ') : 'em andamento'} />

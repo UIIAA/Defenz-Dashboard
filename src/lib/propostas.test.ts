@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classificarEmail, contarPropostas } from './propostas';
+import { classificarEmail, contarPropostas, contarPropostasPorRemetente } from './propostas';
 
 function email(over: Partial<Parameters<typeof classificarEmail>[0]> = {}) {
   return {
@@ -269,5 +269,41 @@ describe('contarPropostas — a chave é a EMPRESA, não o endereço', () => {
     ]);
 
     expect(n).toBe(2);
+  });
+});
+
+describe('contarPropostasPorRemetente', () => {
+  it('atribui a proposta a quem mandou, com nome curto', () => {
+    const r = contarPropostasPorRemetente([
+      email({ internetMessageId: '<1>', remetente: 'gustavo@defenz.com.br', destinatarios: ['a@cliente.com.br'] }),
+      email({ internetMessageId: '<2>', remetente: 'gustavobarbosa@defenz.com.br', destinatarios: ['b@outro.com.br'] }),
+    ]);
+
+    expect(r).toEqual([
+      { remetente: 'Gustavo B', total: 1 },
+      { remetente: 'Gustavo F', total: 1 },
+    ]);
+  });
+
+  it('cada remetente conta o que ELE mandou, mesmo cliente no mesmo dia', () => {
+    // Fac. Baiana 25/08: no total geral isso é 1 proposta, mas os dois trabalharam.
+    // Por isso a soma por pessoa pode passar do total — é atribuição de esforço, não rateio.
+    const emails = [
+      email({ internetMessageId: '<b>', remetente: 'gustavobarbosa@defenz.com.br', destinatarios: ['ti@baiana.com.br'] }),
+      email({ internetMessageId: '<l>', remetente: 'leonardoalves@defenz.com.br', destinatarios: ['ti@baiana.com.br'] }),
+    ];
+
+    expect(contarPropostas(emails)).toBe(1);
+    expect(contarPropostasPorRemetente(emails)).toEqual([
+      { remetente: 'Gustavo B', total: 1 },
+      { remetente: 'Leonardo', total: 1 },
+    ]);
+  });
+
+  it('remetente desconhecido aparece com o endereço, não some', () => {
+    const r = contarPropostasPorRemetente([
+      email({ remetente: 'novo.vendedor@defenz.com.br', destinatarios: ['a@cliente.com.br'] }),
+    ]);
+    expect(r).toEqual([{ remetente: 'novo.vendedor@defenz.com.br', total: 1 }]);
   });
 });
