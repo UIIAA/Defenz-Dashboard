@@ -47,6 +47,8 @@ interface DefSQL {
 
 const txt = (campo: string): ColunaSQL => ({ campo, tipo: 'text' });
 const int = (campo: string): ColunaSQL => ({ campo, tipo: 'integer' });
+const arr = (campo: string): ColunaSQL => ({ campo, tipo: 'text[]' });
+const bool = (campo: string): ColunaSQL => ({ campo, tipo: 'boolean' });
 const jsn = (campo: string): ColunaSQL => ({ campo, tipo: 'jsonb' });
 
 const RESUMO_ESCALARES = [
@@ -138,6 +140,31 @@ const DEFS: Record<Tabela, DefSQL> = {
       txt('assunto'),
       txt('status'),
       txt('sequencia'),
+    ],
+  },
+
+  // feature-proposta-email-exchange. Sem dimensões: o vínculo com empresa/negócio é opcional
+  // e nasce nulo — a proposta costuma sair ANTES de o cliente virar negócio no Zoho.
+  emails_enviados: {
+    destino: 'emails_enviados',
+    conflito: ['internet_message_id'],
+    dimensoes: [],
+    extras: [],
+    colunas: [
+      txt('internet_message_id'),
+      txt('caixa'),
+      txt('remetente'),
+      txt('assunto'),
+      { campo: 'enviado_em', tipo: 'timestamptz' },
+      arr('destinatarios'),
+      arr('destinatarios_cliente'),
+      arr('dominios_cliente'),
+      arr('anexos'),
+      bool('tem_anexo'),
+      bool('eh_proposta'),
+      txt('motivo_classificacao'),
+      txt('proposta_ref'),
+      txt('motivo_revisao'),
     ],
   },
 
@@ -426,6 +453,14 @@ export async function resumirNeon(tabela: Tabela): Promise<Resumo> {
     }
     case 'agenda': {
       const [r] = (await sql`select count(*)::int as contagem from agenda_tarefas`) as Resumo[];
+      return r;
+    }
+    case 'emails_enviados': {
+      const [r] = (await sql`select count(*)::int as contagem,
+                                    count(*) filter (where eh_proposta)::int as propostas,
+                                    to_char(min(enviado_em) at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_min,
+                                    to_char(max(enviado_em) at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_max
+                             from emails_enviados`) as Resumo[];
       return r;
     }
     case 'resumo_diario': {

@@ -29,7 +29,10 @@ import { tokenValido } from '@/lib/ingest/token';
 // Leitura ESTRITA com coluna-assinatura (regra derivada do bug de 28/07: gviz devolve
 // a sheet-0 em silêncio quando a aba pedida não existe — foi assim que 11,5k ligações
 // viraram reunião). Sem assinatura, um erro de nome de aba viraria "paridade verde".
-const ABAS: Record<Tabela, { aba: string; assinatura: string[] }> = {
+// `emails_enviados` fica FORA de propósito: ele não tem aba no Sheets (nasce direto no Neon,
+// lido do Exchange), então não existe paridade Neon×Sheets a conferir. Por isso o mapa é
+// Partial: tabela sem aba não é "paridade vermelha", é tabela que não participa do portão.
+const ABAS: Partial<Record<Tabela, { aba: string; assinatura: string[] }>> = {
   deals: { aba: 'deals', assinatura: ['id', 'stage'] },
   ligacoes: { aba: 'ligacoes', assinatura: ['call_id', 'data'] },
   emails: { aba: 'emails', assinatura: ['email_id', 'data'] },
@@ -48,7 +51,7 @@ interface Diagnostico extends Veredito {
 }
 
 async function avaliar(tabela: Tabela): Promise<Diagnostico> {
-  const { aba, assinatura } = ABAS[tabela];
+  const { aba, assinatura } = ABAS[tabela]!;
   const linhas = await fetchTabStrict(aba, assinatura);
 
   if (linhas === null) {
@@ -112,7 +115,16 @@ export async function GET(request: NextRequest) {
   if (pedida !== null && !isTabela(pedida)) {
     return NextResponse.json({ error: 'tabela desconhecida' }, { status: 400 });
   }
-  const alvo: readonly Tabela[] = pedida ? [pedida] : TABELAS;
+  if (pedida !== null && ABAS[pedida] === undefined) {
+    return NextResponse.json(
+      { error: `'${pedida}' não tem aba no Sheets — não há paridade a conferir` },
+      { status: 400 }
+    );
+  }
+  // Tabela sem aba no Sheets (ex.: `emails_enviados`, que nasce direto no Neon a partir do
+  // Exchange) não tem paridade a conferir e fica fora do portão — não é verde nem vermelho.
+  const comAba = TABELAS.filter((t) => ABAS[t] !== undefined);
+  const alvo: readonly Tabela[] = pedida ? [pedida] : comAba;
 
   try {
     const tabelas: Diagnostico[] = [];

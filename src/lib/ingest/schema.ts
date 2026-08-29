@@ -12,6 +12,7 @@
 // e é zero; null = NÃO capturado) — por isso lá os escalares usam os coercers *Nulo.
 
 import { nomeNorm, splitTags } from './normalize';
+import { classificarEmail } from '../propostas';
 import { cnpjValido, somenteDigitos } from '../cnpj';
 
 export const TABELAS = [
@@ -22,6 +23,7 @@ export const TABELAS = [
   'classificacao_ia',
   'agenda',
   'resumo_diario',
+  'emails_enviados',
 ] as const;
 
 export type Tabela = (typeof TABELAS)[number];
@@ -166,6 +168,15 @@ const json: Coercer = (v) => {
  * Zoho passa no dígito verificador, então CNPJ inválido chegando aqui é bug upstream:
  * REJEITA e reporta, não guarda torto (mesma regra de `valor: 'R$ 12,5'`).
  */
+/** Lista de strings (destinatários, nomes de anexo). Ausência vira []; lixo é rejeitado. */
+const listaTexto: Coercer = (v) => {
+  if (vazio(v)) return ok([]);
+  if (!Array.isArray(v)) return nok('esperava lista');
+  const fora = v.find((x) => typeof x !== 'string');
+  if (fora !== undefined) return nok('lista com item que não é texto');
+  return ok((v as string[]).map((x) => x.trim()).filter(Boolean));
+};
+
 const cnpj: Coercer = (v) => {
   const r = texto(v);
   if (!r.ok || r.v === null) return r;
@@ -267,6 +278,53 @@ const DEFS: Record<Tabela, DefTabela> = {
       ['status', 'status', texto],
       ['sequencia', 'sequencia', texto],
     ],
+  },
+
+  // feature-proposta-email-exchange — e-mail ENVIADO pelo time, lido do Exchange.
+  // A classificação de proposta NÃO vem do n8n: é derivada aqui, em `pos`, pela mesma função
+  // que os testes cobrem. Assim a regra tem um dono só.
+  emails_enviados: {
+    chave: ['internet_message_id'],
+    campos: [
+      ['internet_message_id', 'internet_message_id', obrig(texto)],
+      ['caixa', 'caixa', obrig(texto)],
+      ['remetente', 'remetente', obrig(texto)],
+      ['assunto', 'assunto', texto],
+      ['enviado_em', 'enviado_em', obrig(timestamp)],
+      ['destinatarios', 'destinatarios', listaTexto],
+      ['anexos', 'anexos', listaTexto],
+    ],
+    // derivados em `pos` — declarados aqui para a guarda "nenhum campo validado pode ser
+    // descartado na gravação" enxergar que o SQL consome todos eles.
+    extras: [
+      'destinatarios_cliente',
+      'dominios_cliente',
+      'eh_proposta',
+      'motivo_classificacao',
+      'proposta_ref',
+      'motivo_revisao',
+      'tem_anexo',
+    ],
+    pos: (_bruta, saida) => {
+      const destinatarios = (saida.destinatarios as string[]) ?? [];
+      const anexos = (saida.anexos as string[]) ?? [];
+      const c = classificarEmail({
+        internetMessageId: String(saida.internet_message_id ?? ''),
+        caixa: String(saida.caixa ?? ''),
+        remetente: String(saida.remetente ?? ''),
+        assunto: typeof saida.assunto === 'string' ? saida.assunto : '',
+        enviadoEm: String(saida.enviado_em ?? ''),
+        destinatarios,
+        anexos,
+      });
+      saida.destinatarios_cliente = c.destinatariosCliente;
+      saida.dominios_cliente = c.dominiosCliente;
+      saida.eh_proposta = c.ehProposta;
+      saida.motivo_classificacao = c.motivoClassificacao;
+      saida.proposta_ref = c.propostaRef;
+      saida.motivo_revisao = c.motivoRevisao;
+      saida.tem_anexo = anexos.length > 0;
+    },
   },
 
   leads: {

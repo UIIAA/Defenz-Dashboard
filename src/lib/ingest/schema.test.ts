@@ -9,7 +9,9 @@ import {
 } from './schema';
 
 describe('tabelas suportadas', () => {
-  it('são as 7 da primeira onda', () => {
+  it('são as 7 da primeira onda mais emails_enviados', () => {
+    // `emails` é o Apollo (cadência fria). `emails_enviados` é a caixa do Exchange —
+    // fontes diferentes, tabelas diferentes, de propósito.
     expect(TABELAS).toEqual([
       'deals',
       'ligacoes',
@@ -18,6 +20,7 @@ describe('tabelas suportadas', () => {
       'classificacao_ia',
       'agenda',
       'resumo_diario',
+      'emails_enviados',
     ]);
   });
 
@@ -390,5 +393,48 @@ describe('lote', () => {
   it('rejeita item que não é objeto', () => {
     const r = validarLote('emails', ['nope' as unknown as Record<string, unknown>]);
     expect(r.erros[0]).toMatchObject({ linha: 0, campo: '_linha' });
+  });
+});
+
+describe('emails_enviados', () => {
+  const linha = {
+    internet_message_id: '<CPIP284MB4220@outlook.com>',
+    caixa: 'gustavo@defenz.com.br',
+    remetente: 'gustavo@defenz.com.br',
+    assunto: 'RE: Apresentação Bitdefender GravityZone | Defenz',
+    enviado_em: '2026-08-27T18:46:27Z',
+    destinatarios: ['suporte@alvoradadosul.pr.gov.br', 'marcos@DEFENZ.COM.BR'],
+    anexos: ['imagem (1).png', 'Proposta Defenz DFZ-2026-02009.pdf'],
+  };
+
+  it('classifica a proposta e deriva os campos a partir do metadado', () => {
+    const r = validarLote('emails_enviados', [linha]);
+    expect(r.erros).toEqual([]);
+    expect(r.validas[0]).toMatchObject({
+      internet_message_id: '<CPIP284MB4220@outlook.com>',
+      eh_proposta: true,
+      motivo_classificacao: 'anexo',
+      proposta_ref: 'DFZ-2026-02009',
+      destinatarios_cliente: ['suporte@alvoradadosul.pr.gov.br'],
+      tem_anexo: true,
+    });
+  });
+
+  it('rejeita linha sem a chave natural em vez de inventar uma', () => {
+    const r = validarLote('emails_enviados', [{ ...linha, internet_message_id: '' }]);
+    expect(r.validas).toEqual([]);
+    expect(r.erros[0].campo).toBe('internet_message_id');
+  });
+
+  it('rejeita data de envio que não é data', () => {
+    const r = validarLote('emails_enviados', [{ ...linha, enviado_em: 'ontem' }]);
+    expect(r.validas).toEqual([]);
+    expect(r.erros[0].campo).toBe('enviado_em');
+  });
+
+  it('chave repetida no lote vira duplicado, não segunda linha', () => {
+    const r = validarLote('emails_enviados', [linha, linha]);
+    expect(r.validas).toHaveLength(1);
+    expect(r.duplicados).toBe(1);
   });
 });
