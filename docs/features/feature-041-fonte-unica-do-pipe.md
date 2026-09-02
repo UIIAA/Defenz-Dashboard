@@ -195,3 +195,62 @@ f-039 junto.
   `609dj477lHEPBX6J`, porque os dois são n8n, e a cópia verbatim do `pipe.ts`.
 - **Marcos:** aprovar a spec, e decidir se avisa o Fernando antes da onda B, que é a que muda
   número em tela.
+
+---
+
+# Crítica adversarial da §3.3 — 02/09/2026, sessão Dashboard, com acesso às fontes
+
+Rodada antes de implementar a Onda B, contra a aba `deals` (306 linhas, pós-limpeza) e o
+workflow `609dj477lHEPBX6J`. **Duas afirmações caíram, os quatro números foram confirmados, e
+apareceu uma contradição interna que faria a Onda B quebrar a f-040.**
+
+## ✅ CONFIRMADO — as quatro definições existem
+
+| definição | spec (02/09) | medido |
+|---|---:|---:|
+| `isPipeline` | 9 | **9** |
+| `isAberto` | 64 | **63** |
+| `isActive` | 109 | **108** |
+| farol f-037 | 25 | **24** |
+
+As diferenças de 1 são a base mexendo, não erro da spec.
+
+## ❌ REFUTADO — "allowlist de 4 nomes"
+
+São **5 entradas** e **3 estágios distintos** — as outras duas são variantes sem acento.
+
+## ❌ REFUTADO — "descarta Reunião Técnica e Proposta/Governo, 15 negócios"
+
+Descarta **54**: Reunião Técnica 11, Proposta / Governo 4 e **Grandes Contas 39**. A spec omitiu
+exatamente a carteira que é o objeto da f-040. O salto na tela é **9 → 63**, não 9 → 24.
+
+Em valor: **R$ 48.190,00 → R$ 181.421,95** — todo o acréscimo de Reunião Técnica
+(R$ 109.565,34) e Proposta/Governo (R$ 23.666,61); as 39 entram com R$ 0.
+
+## 🔴 CONTRADIÇÃO INTERNA — §3.3 manda fazer o que §4 proíbe, e quebraria a f-040
+
+**§4** põe o farol da f-037 fora de escopo. **§3.3** manda copiar o `pipe.ts` verbatim para o
+Code node `Filtrar Pipe` do `609dj477lHEPBX6J`.
+
+Verifiquei o nó: a allowlist dele responde **"quem a IA deve classificar"**, não "o que está
+aberto" — é escopo deliberado. Trocá-la por `isAberto()` levaria o farol de **24 para 63**, e:
+
+1. as **39 Grandes Contas entrariam na classificação por IA**, hoje fora de propósito;
+2. **custo de Gemini** sobe sem decisão;
+3. **invalidaria o R2.4 da f-040**, já implementado — a tela avisa que a temperatura das
+   Grandes Contas veio da carga e não é atualizada. O aviso viraria mentira no dia seguinte.
+
+**Adotado:** `pipe.ts` é fonte única do **vocabulário** e do `isAberto()` da **tela**. O
+`Filtrar Pipe` mantém a allowlist própria. Para lá copia-se o vocabulário, não a seleção.
+
+## ⚠️ ACHADO — `PIPELINE_STAGES` tinha dois usos com significados diferentes
+
+Além da `isPipeline`, a mesma lista alimentava `classifyPipelineBucket`, que só **nomeia baldes
+de um gráfico**. Aposentar os dois juntos colapsaria o gráfico inteiro em `OPORTUNIDADE`.
+Separado: a `isPipeline` morreu, o classificador ficou com lista própria
+(`BUCKET_PIPELINE_STAGES`).
+
+## Veredito
+
+A Onda B pode sair, com dois ajustes: o de-para é **9 → 63** e **R$ 48.190,00 → R$ 181.421,95**;
+e **não** substituir o `Filtrar Pipe` do farol.
