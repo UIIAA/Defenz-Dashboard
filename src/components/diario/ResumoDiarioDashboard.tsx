@@ -16,7 +16,7 @@ import { DayNavigator, type DiarioView } from './DayNavigator';
 import { BaseInstaladaDrawer } from './BaseInstaladaDrawer';
 import { useResumoDiario } from '@/hooks/useResumoDiario';
 import { usePropostasEmail } from '@/hooks/usePropostasEmail';
-import { todayBRT } from '@/lib/resumo-diario';
+import { todayBRT, ULTIMO } from '@/lib/resumo-diario';
 import type { ResumoDiario, ResumoSeriePoint, ResumoBaseInstalada } from '@/lib/types';
 
 const nf = (n: number) => n.toLocaleString('pt-BR');
@@ -211,17 +211,28 @@ function CoverageBadges({ r }: { r: ResumoDiario }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export const ResumoDiarioDashboard = () => {
   const today = useMemo(() => todayBRT(), []);
-  const [view, setView] = useState<DiarioView>({ kind: 'dia', data: today });
+  // `null` = "ainda não escolhi nada, quero o último dia com dado". Deliberadamente derivado
+  // em vez de sincronizado por efeito: `setState` dentro de efeito gera render em cascata.
+  const [view, setView] = useState<DiarioView | null>(null);
   const [baseDrawerOpen, setBaseDrawerOpen] = useState(false);
-  const query = view.kind === 'dia' ? `data=${view.data}` : `from=${view.from}&to=${view.to}`;
-  const { setQuery, response, loading, error, refetch } = useResumoDiario(`data=${today}`);
+  const query =
+    view === null
+      ? `data=${ULTIMO}`
+      : view.kind === 'dia'
+        ? `data=${view.data}`
+        : `from=${view.from}&to=${view.to}`;
+  const { setQuery, response, loading, error, refetch } = useResumoDiario(`data=${ULTIMO}`);
 
   useEffect(() => { setQuery(query); }, [query, setQuery]);
+
+  // O que a tela mostra enquanto ninguém escolheu: a data que o SERVIDOR resolveu. Antes da
+  // primeira resposta cai em `today` — dura o tempo do "Carregando".
+  const vista: DiarioView = view ?? { kind: 'dia', data: response?.data_resolvida ?? today };
 
   // feature-proposta-email-exchange — só no modo DIA. Em período a chave (cliente, dia) teria
   // que ser agregada por dia antes de somar, e somar totais diários já deduplicados daria
   // número maior que a verdade. Enquanto isso não existe, o card não finge cobrir período.
-  const { dados: propostasEmail } = usePropostasEmail(view.kind === 'dia' ? view.data : null);
+  const { dados: propostasEmail } = usePropostasEmail(vista.kind === 'dia' ? vista.data : null);
 
   const onDay = (d: string) => setView({ kind: 'dia', data: d });
   const onRange = (from: string, to: string) => setView({ kind: 'periodo', from, to });
@@ -229,17 +240,17 @@ export const ResumoDiarioDashboard = () => {
   const isPeriodo = !!response?.periodo;
   const headerLabel = useMemo(() => {
     try {
-      if (view.kind === 'periodo') {
-        const f = format(new Date(`${view.from}T12:00:00`), 'dd/MM', { locale: ptBR });
-        const t = format(new Date(`${view.to}T12:00:00`), 'dd/MM/yyyy', { locale: ptBR });
+      if (vista.kind === 'periodo') {
+        const f = format(new Date(`${vista.from}T12:00:00`), 'dd/MM', { locale: ptBR });
+        const t = format(new Date(`${vista.to}T12:00:00`), 'dd/MM/yyyy', { locale: ptBR });
         const dias = response?.periodo?.dias ?? 0;
         return `PERÍODO ${f} – ${t} · ${dias} ${dias === 1 ? 'DIA COM DADO' : 'DIAS COM DADO'}`;
       }
-      return format(new Date(`${view.data}T12:00:00`), "dd 'DE' MMMM yyyy", { locale: ptBR }).toUpperCase();
+      return format(new Date(`${vista.data}T12:00:00`), "dd 'DE' MMMM yyyy", { locale: ptBR }).toUpperCase();
     } catch {
       return '';
     }
-  }, [view, response]);
+  }, [vista, response]);
 
   const r = response?.resumo ?? null;
   const floor = response?.floor ?? today;
@@ -257,7 +268,7 @@ export const ResumoDiarioDashboard = () => {
           <p className="text-red-600 text-sm font-bold tracking-wide mt-1">{headerLabel} · INDICADORES DIÁRIOS DEFENZ</p>
         </div>
         <div className="flex items-center gap-3">
-          <DayNavigator view={view} floor={floor} today={today} onDay={onDay} onRange={onRange} loading={loading} />
+          <DayNavigator view={vista} floor={floor} today={today} onDay={onDay} onRange={onRange} loading={loading} />
           <button
             onClick={refetch}
             disabled={loading}
@@ -294,9 +305,9 @@ export const ResumoDiarioDashboard = () => {
       ) : !r ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <p className="text-lg text-slate-600">
-            {view.kind === 'periodo'
+            {vista.kind === 'periodo'
               ? 'Sem dados no período selecionado'
-              : `Sem snapshot para ${view.data.slice(8, 10)}/${view.data.slice(5, 7)}`}
+              : `Sem snapshot para ${vista.data.slice(8, 10)}/${vista.data.slice(5, 7)}`}
           </p>
           <p className="text-sm text-slate-400 mt-2">Rode o snapshot diário ou escolha outra data.</p>
           {response && response.datas_disponiveis.length > 0 && (

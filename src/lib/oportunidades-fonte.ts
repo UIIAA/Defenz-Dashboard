@@ -33,11 +33,13 @@ interface CamposNeon {
   vencimento_licenca: string | null;
   owner_id: string | null;
   owner_nome: string | null;
+  grande_conta: boolean;
 }
 
 async function camposPorId(): Promise<Map<string, CamposNeon>> {
   const linhas = (await db()`
     select id, temperatura, estado_negocio, antivirus_atual, owner_id, owner_nome,
+           grande_conta,
            to_char(vencimento_licenca, 'YYYY-MM-DD') as vencimento_licenca
     from deals
     where temperatura is not null and temperatura <> ''
@@ -45,6 +47,9 @@ async function camposPorId(): Promise<Map<string, CamposNeon>> {
        or antivirus_atual is not null and antivirus_atual <> ''
        or vencimento_licenca is not null
        or owner_id is not null and owner_id <> ''
+       -- feature-040: sem esta linha, um negócio marcado cujo único campo preenchido fosse a
+       -- marca sairia do join EM SILENCIO. Mesmo modo de falha do continueOnFail do Sheets.
+       or grande_conta
   `) as {
     id: string;
     temperatura: string | null;
@@ -53,6 +58,7 @@ async function camposPorId(): Promise<Map<string, CamposNeon>> {
     vencimento_licenca: string | null;
     owner_id: string | null;
     owner_nome: string | null;
+    grande_conta: boolean | null;
   }[];
   return new Map(
     linhas.map((l) => [
@@ -67,6 +73,7 @@ async function camposPorId(): Promise<Map<string, CamposNeon>> {
         vencimento_licenca: l.vencimento_licenca,
         owner_id: l.owner_id,
         owner_nome: l.owner_nome,
+        grande_conta: l.grande_conta === true,
       },
     ])
   );
@@ -95,13 +102,12 @@ export async function carregarOportunidades(hoje: string): Promise<Oportunidades
       vencimento_licenca: c.vencimento_licenca ?? undefined,
       owner_id: c.owner_id ?? undefined,
       owner_nome: c.owner_nome ?? undefined,
+      grande_conta: c.grande_conta,
     };
   });
 
   return computeOportunidades(enriquecidos, hoje);
 }
 
-/** Data de hoje em São Paulo — `dias_sem_toque` é contagem de dias corridos. */
-export function hojeBRT(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-}
+/** Data de hoje em São Paulo — fonte única em `brt.ts` (f-041 §3.2). */
+export { hojeBRT } from './brt';

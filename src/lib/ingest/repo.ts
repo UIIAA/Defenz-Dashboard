@@ -23,6 +23,8 @@ interface ColunaSQL {
   db?: string;
   /** tipo declarado no jsonb_to_recordset */
   tipo: string;
+  /** no upsert vira OR com o valor já gravado, nunca sobrescreve (f-040) */
+  sticky?: boolean;
 }
 
 interface DimSQL {
@@ -46,6 +48,11 @@ interface DefSQL {
 }
 
 const txt = (campo: string): ColunaSQL => ({ campo, tipo: 'text' });
+/**
+ * feature-040 — coluna que só sabe LIGAR. No `on conflict` vira
+ * `col = destino.col or excluded.col`: uma vez marcada, nenhuma coleta futura desmarca.
+ */
+const boolSticky = (campo: string): ColunaSQL => ({ campo, tipo: 'boolean', sticky: true });
 const int = (campo: string): ColunaSQL => ({ campo, tipo: 'integer' });
 const arr = (campo: string): ColunaSQL => ({ campo, tipo: 'text[]' });
 const bool = (campo: string): ColunaSQL => ({ campo, tipo: 'boolean' });
@@ -93,6 +100,8 @@ const DEFS: Record<Tabela, DefSQL> = {
       txt('owner_nome'),
       txt('estado_negocio'),
       txt('antivirus_atual'),
+      // feature-040 §pedido 4 — sticky: entrou uma vez, é Grande Conta para sempre
+      boolSticky('grande_conta'),
       { campo: 'created_time', tipo: 'date' },
       { campo: 'modified_time', tipo: 'date' },
       { campo: 'closing_date', tipo: 'date' },
@@ -287,10 +296,15 @@ function stmtPrincipal(def: DefSQL): string {
     .join(' ');
 
   const setar = [
-    ...def.colunas.map(colunaDb).filter((c) => !def.conflito.includes(c)),
-    ...def.dimensoes.map((d) => d.fk),
+    ...def.colunas
+      .filter((c) => !def.conflito.includes(colunaDb(c)))
+      .map((c) =>
+        c.sticky
+          ? `${colunaDb(c)} = ${def.destino}.${colunaDb(c)} or excluded.${colunaDb(c)}`
+          : `${colunaDb(c)} = excluded.${colunaDb(c)}`
+      ),
+    ...def.dimensoes.map((d) => `${d.fk} = excluded.${d.fk}`),
   ]
-    .map((c) => `${c} = excluded.${c}`)
     .concat('ingerido_em = now()')
     .join(', ');
 

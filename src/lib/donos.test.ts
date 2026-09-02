@@ -23,4 +23,22 @@ describe('nomeDono', () => {
     expect(nomeDono('', '   ')).toBe(SEM_DONO);
     expect(nomeDono(undefined, undefined)).toBe(SEM_DONO);
   });
+
+  // --- feature-040 §pedido 4 ---
+  it('Grande Conta na conta compartilhada aparece como Francisco', () => {
+    expect(nomeDono('7067822000000576001', 'vendor 2', true)).toBe('Francisco');
+  });
+
+  it('o resto da conta compartilhada continua Leonardo', () => {
+    expect(nomeDono('7067822000000576001', 'vendor 2', false)).toBe('Leonardo');
+  });
+
+  it('a marca de Grande Conta não sequestra os outros donos', () => {
+    expect(nomeDono('7067822000000743027', 'Gustavo Figueira', true)).toBe('Gustavo F');
+    expect(nomeDono('7067822000009999999', 'Fulano de Tal', true)).toBe('Fulano de Tal');
+  });
+
+  it('sem a marca, o comportamento é exatamente o de hoje', () => {
+    expect(nomeDono('7067822000000576001', 'vendor 2')).toBe('Leonardo');
+  });
 });

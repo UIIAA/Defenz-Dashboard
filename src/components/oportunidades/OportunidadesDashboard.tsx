@@ -45,6 +45,18 @@ const ATIVO: Record<Filtro, string> = {
   vazio: 'border-slate-400 bg-slate-100 text-slate-800',
 };
 
+// feature-040 §pedido 2 — a carteira é uma DIMENSÃO SEPARADA dos chips de temperatura.
+//
+// Por que não virou mais um chip: os chips são um `Set` com OU entre eles, então
+// `quente + grandes contas` significaria "quente OU grande conta". Dimensão diferente, controle
+// diferente — e as duas se compõem por E.
+type Carteira = 'todas' | 'so' | 'sem';
+const CARTEIRAS: { key: Carteira; label: string }[] = [
+  { key: 'todas', label: 'Todas' },
+  { key: 'so', label: 'Só Grandes Contas' },
+  { key: 'sem', label: 'Sem Grandes Contas' },
+];
+
 /** Mesma janela do servidor (`refresh/route.ts`). O cliente é conveniência; o servidor manda. */
 const JANELA_MS = 2 * 60 * 1000;
 
@@ -208,6 +220,7 @@ export const OportunidadesDashboard = () => {
   const [data, setData] = useState<Payload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<Set<Filtro>>(new Set());
+  const [carteira, setCarteira] = useState<Carteira>('todas');
   const [atualizando, setAtualizando] = useState(false);
   const ultimoRefresh = useRef(0);
   const montado = useRef(true);
@@ -249,9 +262,15 @@ export const OportunidadesDashboard = () => {
 
   const visiveis = useMemo(() => {
     if (!data) return [];
-    if (filtros.size === 0) return data.itens;
-    return data.itens.filter((o) => filtros.has(o.temperatura === '' ? 'vazio' : o.temperatura));
-  }, [data, filtros]);
+    // As duas dimensões se compõem por E: "Só Grandes Contas" + "quente" = as quentes do
+    // Francisco. A carteira filtra primeiro porque é o corte mais grosso.
+    const naCarteira =
+      carteira === 'todas'
+        ? data.itens
+        : data.itens.filter((o) => (carteira === 'so' ? o.grande_conta : !o.grande_conta));
+    if (filtros.size === 0) return naCarteira;
+    return naCarteira.filter((o) => filtros.has(o.temperatura === '' ? 'vazio' : o.temperatura));
+  }, [data, filtros, carteira]);
 
   const valorVisivel = useMemo(() => visiveis.reduce((s, o) => s + o.valor, 0), [visiveis]);
 
@@ -273,12 +292,15 @@ export const OportunidadesDashboard = () => {
   // é um controle e não um rótulo.
   const contagem = useMemo(() => {
     const c: Partial<Record<Filtro, number>> = {};
-    for (const o of data?.itens ?? []) {
+    const base = (data?.itens ?? []).filter((o) =>
+      carteira === 'todas' ? true : carteira === 'so' ? o.grande_conta : !o.grande_conta
+    );
+    for (const o of base) {
       const k: Filtro = o.temperatura === '' ? 'vazio' : o.temperatura;
       c[k] = (c[k] ?? 0) + 1;
     }
     return c;
-  }, [data]);
+  }, [data, carteira]);
 
   if (erro) return <ErrorState error={erro} onRetry={() => window.location.reload()} />;
   if (!data) return <p className="text-sm text-slate-400 py-12 text-center">Carregando…</p>;
@@ -377,14 +399,67 @@ export const OportunidadesDashboard = () => {
         })}
       </div>
 
+      {/* feature-040 §pedido 2 — isolar E excluir, os dois modos que o Marcos pediu. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-slate-400 mr-0.5">Carteira</span>
+        <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+          {CARTEIRAS.map((c) => {
+            const on = carteira === c.key;
+            const n =
+              c.key === 'todas'
+                ? data.total
+                : c.key === 'so'
+                  ? data.grandes_contas
+                  : data.total - data.grandes_contas;
+            return (
+              <button
+                key={c.key}
+                onClick={() => setCarteira(c.key)}
+                aria-pressed={on}
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  on ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {c.label}
+                <span className={on ? 'opacity-60' : 'text-slate-400'}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* feature-040 R2.4 — a temperatura destes 39 NÃO tem rotina por trás: veio na carga de
+          27/08 e o farol (WF 609dj477lHEPBX6J) não cobre este estágio. Sem esta linha, bolinha
+          congelada passa por leitura viva — pior que o cinza de "ninguém classificou". */}
+      {carteira === 'so' && visiveis.length > 0 && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-slate-500" />
+          <p className="text-sm text-slate-700">
+            A temperatura destes negócios veio da <strong className="font-semibold">carga
+            inicial</strong> e <strong className="font-semibold">não é atualizada</strong> — a
+            rotina automática não cobre o estágio Grandes Contas. Trate a cor como ponto de
+            partida, não como leitura de hoje.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-baseline gap-2 border-b border-slate-200 pb-2">
         <span className="text-lg font-semibold text-slate-900">
           {visiveis.length} {visiveis.length === 1 ? 'negócio' : 'negócios'}
         </span>
-        <span className="text-sm text-slate-500 font-mono">{formatCurrency(valorVisivel)}</span>
-        {filtros.size > 0 && (
+        {/* feature-040 R2.5 — as Grandes Contas têm `Amount` vazio no Zoho, então filtrar só
+            elas estamparia "R$ 0,00" e pareceria tela quebrada. */}
+        {valorVisivel > 0 ? (
+          <span className="text-sm text-slate-500 font-mono">{formatCurrency(valorVisivel)}</span>
+        ) : (
+          <span className="text-sm text-slate-400 italic">valor não informado</span>
+        )}
+        {(filtros.size > 0 || carteira !== 'todas') && (
           <button
-            onClick={() => setFiltros(new Set())}
+            onClick={() => {
+              setFiltros(new Set());
+              setCarteira('todas');
+            }}
             className="ml-auto text-xs text-slate-400 hover:text-red-600"
           >
             limpar filtro

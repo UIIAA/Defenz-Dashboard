@@ -109,3 +109,17 @@ describe('a linha validada alimenta o recordset sem sobra', () => {
     }
   });
 });
+
+// --- feature-040 §pedido 4 · a marca de Grande Conta é durável ---
+describe('grande_conta é sticky no upsert', () => {
+  it('o on conflict faz OR com o valor que já está na tabela, não sobrescreve', () => {
+    const sql = sqlDoLote('deals').join('\n');
+    expect(sql).toContain('grande_conta = deals.grande_conta or excluded.grande_conta');
+  });
+
+  it('nenhuma outra coluna virou sticky por acidente', () => {
+    const sql = sqlDoLote('deals').join('\n');
+    expect(sql).toContain('stage = excluded.stage');
+    expect(sql).toContain('valor = excluded.valor');
+  });
+});

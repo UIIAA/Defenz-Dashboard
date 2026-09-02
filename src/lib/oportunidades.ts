@@ -62,6 +62,11 @@ export interface Oportunidade {
   janela: boolean;
   /** Dono do negócio, já traduzido para o nome que a casa usa (src/lib/donos.ts). */
   dono: string;
+  /**
+   * feature-040 — carteira de Grandes Contas. Vem do Neon (sticky), NÃO do `stage`: o negócio
+   * que avança para `Reunião Técnica` continua marcado. É o que sustenta o critério A5.
+   */
+  grande_conta: boolean;
   // SEM comissao_valor: a tela é aberta ao time (spec §5.2) e o campo é margem da Defenz.
 }
 
@@ -82,6 +87,8 @@ export interface OportunidadesResult {
   sem_estado: number;
   /** Contagem e valor por posse, na ordem de exibição. Só grupos com pelo menos 1 card. */
   grupos: GrupoPosse[];
+  /** Quantos do total são Grandes Contas. `total - grandes_contas` é o recorte "sem elas". */
+  grandes_contas: number;
   /** Vencendo em até 90 dias, do maior valor para o menor. */
   janela: { id: string; nome: string; valor: number; vencimento: string }[];
 }
@@ -110,6 +117,7 @@ export function computeOportunidades(
     const venc = d.vencimento_licenca ? String(d.vencimento_licenca).slice(0, 10) : null;
     const dias = diasParaVencer(venc, hoje);
     const av = String(d.antivirus_atual ?? '').trim();
+    const grandeConta = d.grande_conta === true;
     itens.push({
       id: String(d.id ?? ''),
       nome: String(d.nome ?? ''),
@@ -126,7 +134,8 @@ export function computeOportunidades(
       vencimento: venc,
       dias_para_vencer: dias,
       janela: naJanela(dias),
-      dono: nomeDono(d.owner_id, d.owner_nome),
+      grande_conta: grandeConta,
+      dono: nomeDono(d.owner_id, d.owner_nome, grandeConta),
     });
   }
 
@@ -161,6 +170,7 @@ export function computeOportunidades(
     valor_total: itens.reduce((s, x) => s + x.valor, 0),
     sem_classificacao: itens.filter((x) => x.temperatura === '').length,
     sem_estado: itens.filter((x) => x.estado === '').length,
+    grandes_contas: itens.filter((x) => x.grande_conta).length,
     grupos,
     janela: itens
       .filter((x) => x.janela && x.vencimento)

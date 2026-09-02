@@ -165,6 +165,32 @@ export function dedupeByData(raws: RawResumoDiario[]): RawResumoDiario[] {
   return Array.from(byData.values());
 }
 
+/**
+ * feature-040 pedido 1 — qual dia a tela deve mostrar.
+ *
+ * `'ultimo'` = o dia mais recente que TEM linha em `resumo_diario`. Não é "último dia útil":
+ * depois que o Snapshot Diário passou a rodar às 11h e 14h (além das 17h50), o dia corrente
+ * tem dado a partir das 11h, e "último dia útil" esconderia justamente esse dia.
+ *
+ * Resolver isto no SERVIDOR é obrigatório, não estético: o cliente monta antes de qualquer
+ * resposta, então não pode saber qual é o último dia com dado sem já ter perguntado.
+ */
+export function resolveDataPedida(
+  pedido: string,
+  datasDisponiveis: string[],
+  hoje: string
+): string {
+  if (pedido === ULTIMO) {
+    const validas = datasDisponiveis.filter((d) => DATE_RE.test(d));
+    if (validas.length === 0) return hoje;
+    return validas.reduce((a, b) => (a > b ? a : b));
+  }
+  return DATE_RE.test(pedido) ? pedido : hoje;
+}
+
+/** Valor aceito no parâmetro `data` para pedir o dia mais recente com linha. */
+export const ULTIMO = 'ultimo';
+
 export function availableDates(raws: RawResumoDiario[]): string[] {
   return dedupeByData(raws)
     .map(r => String(r.data ?? '').slice(0, 10))

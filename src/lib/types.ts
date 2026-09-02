@@ -51,6 +51,8 @@ export interface RawClassificacao {
 }
 
 export interface RawDeal {
+  /** feature-040 — carteira de Grandes Contas (Neon, sticky). Ausente = false. */
+  grande_conta?: boolean;
   id?: string;
   nome?: string;
   empresa?: string;
@@ -736,6 +738,11 @@ export interface ResumoDiarioResponse {
   floor: string;                   // data mínima navegável (YYYY-MM-DD)
   base_atual: ResumoBaseInstalada | null; // base instalada mais recente (estado atual)
   periodo: PeriodoInfo | null;     // preenchido quando a resposta é um intervalo agregado
+  /**
+   * feature-040 pedido 1 — a data que o servidor realmente serviu. Preenchida sempre no modo
+   * dia. O cliente pede `data=ultimo` sem saber qual é, e sincroniza a navegação por aqui.
+   */
+  data_resolvida?: string;
   _cached?: boolean;
   _cacheAge?: number;
 }

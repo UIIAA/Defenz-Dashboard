@@ -15,6 +15,8 @@ import {
   daysInRange,
   spanDays,
   BACKFILL_MAX_DAYS,
+  resolveDataPedida,
+  ULTIMO,
 } from "@/lib/resumo-diario";
 import type { RawResumoDiario, ResumoDiarioResponse } from "@/lib/types";
 
@@ -41,6 +43,9 @@ export async function GET(request: NextRequest) {
   const isRange = !!fromRaw && !!toRaw && DATE_RE.test(fromRaw) && DATE_RE.test(toRaw);
 
   const rawData = searchParams.get("data") || today;
+  // feature-040 pedido 1 — `data=ultimo` pede o dia mais recente COM LINHA. Só dá para
+  // resolver depois de ler a aba, então aqui só marcamos a intenção.
+  const querUltimo = rawData === ULTIMO;
   // Default + clamp into [today-120, today] (BRT). Reject malformed input → today.
   const data = clampData(DATE_RE.test(rawData) ? rawData : today, today);
 
@@ -49,7 +54,11 @@ export async function GET(request: NextRequest) {
   let to = isRange ? clampData(toRaw as string, today) : data;
   if (isRange && from > to) { const t = from; from = to; to = t; }
 
-  const cacheKey = isRange ? `range_${from}_${to}` : `resumo_${data}`;
+  const cacheKey = isRange
+    ? `range_${from}_${to}`
+    : querUltimo
+      ? `resumo_${ULTIMO}`
+      : `resumo_${data}`;
   const cached = memoryCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return NextResponse.json({
@@ -81,13 +90,18 @@ export async function GET(request: NextRequest) {
         floor: hardFloor,
         base_atual: null,
         periodo: null,
+        data_resolvida: data,
       };
       return NextResponse.json(empty);
     }
 
     const deduped = dedupeByData(rowsRaw);
     const dates = availableDates(rowsRaw);
-    const match = deduped.find(r => String(r.data ?? "").slice(0, 10) === data);
+    // Só agora dá para saber qual é o último dia com linha.
+    const dataEfetiva = querUltimo
+      ? clampData(resolveDataPedida(ULTIMO, dates, today), today)
+      : data;
+    const match = deduped.find(r => String(r.data ?? "").slice(0, 10) === dataEfetiva);
 
     // Base instalada is current-state only (Zoho has no point-in-time history) and is
     // populated only on live days. Expose the most recent base so the Clientes Ativos
@@ -112,10 +126,11 @@ export async function GET(request: NextRequest) {
       response = {
         resumo: match ? parseResumoRow(match) : null,
         datas_disponiveis: dates,
-        serie: buildSerie(rowsRaw, data, 30),
+        serie: buildSerie(rowsRaw, dataEfetiva, 30),
         floor: navigatorFloor(dates, today),
         base_atual,
         periodo: null,
+        data_resolvida: dataEfetiva,
       };
     }
 

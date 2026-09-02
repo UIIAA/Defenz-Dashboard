@@ -167,3 +167,48 @@ describe("computeOportunidades", () => {
     expect(JSON.stringify(r)).not.toContain("580");
   });
 });
+
+// --- feature-040 §pedido 4 · a carteira do Francisco ---
+describe("Grandes Contas", () => {
+  const COMPARTILHADA = "7067822000000576001";
+  const carteira: RawDeal[] = [
+    { id: "gc1", nome: "VIVO", stage: "Grandes Contas", valor: 0, temperatura: "quente",
+      owner_id: COMPARTILHADA, owner_nome: "vendor 2", grande_conta: true, resultados: "" },
+    { id: "gc2", nome: "VIVEST", stage: "Grandes Contas", valor: 0, temperatura: "frio",
+      owner_id: COMPARTILHADA, owner_nome: "vendor 2", grande_conta: true, resultados: "" },
+    { id: "n1", nome: "Comum do Leonardo", stage: "Proposta Enviada", valor: 5000,
+      owner_id: COMPARTILHADA, owner_nome: "vendor 2", resultados: "" },
+  ];
+
+  it("o cartão de Grande Conta mostra Francisco", () => {
+    expect(computeOportunidades(carteira, HOJE).itens.find((i) => i.id === "gc1")!.dono).toBe("Francisco");
+  });
+
+  it("o negócio comum da MESMA conta continua Leonardo", () => {
+    expect(computeOportunidades(carteira, HOJE).itens.find((i) => i.id === "n1")!.dono).toBe("Leonardo");
+  });
+
+  it("a marca viaja até o item, para a tela poder filtrar", () => {
+    const r = computeOportunidades(carteira, HOJE);
+    expect(r.itens.find((i) => i.id === "gc1")!.grande_conta).toBe(true);
+    expect(r.itens.find((i) => i.id === "n1")!.grande_conta).toBe(false);
+  });
+
+  it("os três estados do filtro somam o total (f-040 R2.2)", () => {
+    const r = computeOportunidades(carteira, HOJE);
+    expect(r.grandes_contas).toBe(2);
+    expect(r.total - r.grandes_contas).toBe(1);
+    expect(r.total).toBe(3);
+  });
+
+  it("A5 — negócio que AVANÇOU de estágio continua Grande Conta e continua do Francisco", () => {
+    const avancou: RawDeal[] = [
+      { id: "gc1", nome: "VIVO", stage: "Reunião Técnica", valor: 0, temperatura: "quente",
+        owner_id: COMPARTILHADA, owner_nome: "vendor 2", grande_conta: true, resultados: "" },
+    ];
+    const r = computeOportunidades(avancou, HOJE);
+    expect(r.itens[0].grande_conta).toBe(true);
+    expect(r.itens[0].dono).toBe("Francisco");
+    expect(r.grandes_contas).toBe(1);
+  });
+});

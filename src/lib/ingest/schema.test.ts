@@ -438,3 +438,23 @@ describe('emails_enviados', () => {
     expect(r.duplicados).toBe(1);
   });
 });
+
+// --- feature-040 §pedido 4 ---
+describe('grande_conta sai do estágio, não de uma coluna da aba', () => {
+  const base = {
+    id: '1', nome: 'ACME', stage: 'Grandes Contas', valor: '0',
+    empresa: 'ACME', created_time: '2026-08-27', modified_time: '2026-08-27',
+  };
+
+  it('estágio "Grandes Contas" marca', () => {
+    const r = validarLote('deals', [base]);
+    expect(r.erros).toEqual([]);
+    expect(r.validas[0].grande_conta).toBe(true);
+  });
+
+  it('qualquer outro estágio não marca', () => {
+    const r = validarLote('deals', [{ ...base, stage: 'Reunião Técnica' }]);
+    expect(r.erros).toEqual([]);
+    expect(r.validas[0].grande_conta).toBe(false);
+  });
+});

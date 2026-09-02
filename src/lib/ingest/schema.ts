@@ -213,10 +213,14 @@ interface DefTabela {
   pos?: (bruta: Record<string, unknown>, saida: LinhaValidada, erros: (campo: string, motivo: string) => void) => void;
 }
 
+/** Estágio do Zoho que semeia a carteira do Francisco (f-040). */
+export const ESTAGIO_GRANDE_CONTA_ZOHO = 'Grandes Contas';
+
 const DEFS: Record<Tabela, DefTabela> = {
   deals: {
     chave: ['id'],
-    extras: ['tags'],
+    // `grande_conta` é derivada no `pos`, não vem coluna da aba — por isso entra aqui.
+    extras: ['tags', 'grande_conta'],
     dimensoes: { empresa: 'empresa' },
     campos: [
       ['id', 'id', obrig(texto)],
@@ -249,6 +253,9 @@ const DEFS: Record<Tabela, DefTabela> = {
     ],
     pos: (bruta, saida) => {
       saida.tags = splitTags(typeof bruta.tags === 'string' ? bruta.tags : null);
+      // feature-040 §pedido 4 — a marca NASCE do estágio, mas não é lida dele depois: o
+      // `on conflict` em repo.ts faz OR, então sair de "Grandes Contas" não desmarca.
+      saida.grande_conta = String(bruta.stage ?? '').trim() === ESTAGIO_GRANDE_CONTA_ZOHO;
     },
   },
 
