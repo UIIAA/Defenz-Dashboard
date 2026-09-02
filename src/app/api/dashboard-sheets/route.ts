@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets, fetchTabStrict } from "@/lib/sheets";
-import { computeMetrics, getLastClosedClient, isPipeline, isClosedWon, bucketizeByWeek, computeClientesAtivos, computeRenovacoesVencidas, computePipelineBuckets, computeFaturamentoMensal, computeMrrArr, computeComissaoOwnerCanal, computeReceitaPorCanal } from "@/lib/metrics";
+import { computeMetrics, getLastClosedClient, isClosedWon, bucketizeByWeek, computeClientesAtivos, computeRenovacoesVencidas, computePipelineBuckets, computeFaturamentoMensal, computeMrrArr, computeComissaoOwnerCanal, computeReceitaPorCanal } from "@/lib/metrics";
+import { getDateRange } from "@/lib/periodo";
+import { hojeBRT } from "@/lib/brt";
+import { isAberto } from "@/lib/pipe";
 import type { RawDeal, RawCall, RawEmail, RawClassificacao, RawReuniao, RawLead } from "@/lib/types";
 
 type EmpresaSource = 'deal' | 'nome-derived' | 'leads-tab' | 'unknown';
@@ -43,57 +46,6 @@ function resolveEmpresa(
 // Cache em memória (por instância do servidor)
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
 
-
-// Compute date range from period key
-function getDateRange(periodo: string): { start: string; end: string; label: string } {
-  const today = new Date();
-  const fmt = (d: Date) => d.toISOString().split('T')[0];
-  const todayStr = fmt(today);
-
-  switch (periodo) {
-    case 'today': {
-      return { start: todayStr, end: todayStr, label: todayStr };
-    }
-    case '7d': {
-      const start = new Date(today);
-      start.setDate(start.getDate() - 7);
-      return { start: fmt(start), end: todayStr, label: 'Últimos 7 dias' };
-    }
-    case '15d': {
-      const start = new Date(today);
-      start.setDate(start.getDate() - 15);
-      return { start: fmt(start), end: todayStr, label: 'Últimos 15 dias' };
-    }
-    case '30d': {
-      const start = new Date(today);
-      start.setDate(start.getDate() - 30);
-      return { start: fmt(start), end: todayStr, label: 'Últimos 30 dias' };
-    }
-    case 'month': {
-      const start = new Date(today.getFullYear(), today.getMonth(), 1);
-      return { start: fmt(start), end: todayStr, label: 'Este Mês' };
-    }
-    case 'alltime': {
-      return { start: '2020-01-01', end: todayStr, label: 'All Time' };
-    }
-    default: {
-      // Custom range: "custom:YYYY-MM-DD:YYYY-MM-DD"
-      if (periodo.startsWith('custom:')) {
-        const parts = periodo.split(':');
-        const inicio = parts[1] ?? '';
-        const fim = parts[2] ?? '';
-        if (/^\d{4}-\d{2}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}-\d{2}$/.test(fim)) {
-          const fmtDate = (iso: string) => {
-            const [, m, d] = iso.split('-');
-            return `${d}/${m}`;
-          };
-          return { start: inicio, end: fim, label: `${fmtDate(inicio)} - ${fmtDate(fim)}` };
-        }
-      }
-      return { start: todayStr, end: todayStr, label: todayStr };
-    }
-  }
-}
 
 // Período de referência para comparação temporal
 function getReferencePeriod(periodo: string): string | null {
@@ -150,7 +102,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const dateRange = getDateRange(periodo);
+    const hoje = hojeBRT();
+    const dateRange = getDateRange(periodo, hoje);
     const metrics = computeMetrics(deals, calls, emails, classificacoes, dateRange, reunioesRaw);
     const weeklyBuckets = bucketizeByWeek(deals, calls, emails, dateRange, reunioesRaw);
     const clientesAtivos = computeClientesAtivos(deals);
@@ -166,7 +119,7 @@ export async function GET(request: NextRequest) {
 
     // Separate deals for frontend
     const dealsAtivos = deals
-      .filter(d => !isClosedWon(String(d.stage || '')) && isPipeline(String(d.stage || '')))
+      .filter(d => isAberto(String(d.stage || '')))
       .map(d => {
         const { empresa, empresa_source } = resolveEmpresa(d, leadsByNome);
         return {
@@ -209,7 +162,7 @@ export async function GET(request: NextRequest) {
     let comparison: any = undefined;
     const refPeriod = getReferencePeriod(periodo);
     if (refPeriod && !periodo.startsWith('custom:')) {
-      const refRange = getDateRange(refPeriod);
+      const refRange = getDateRange(refPeriod, hoje);
       const refMetrics = computeMetrics(deals, calls, emails, classificacoes, refRange);
       const diffDays = Math.round(
         (new Date(refRange.end).getTime() - new Date(refRange.start).getTime()) / 86400000

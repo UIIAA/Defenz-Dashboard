@@ -5,13 +5,13 @@ import { fetchFromSheets, fetchTabStrict } from "@/lib/sheets";
 import {
   computeMetrics,
   getLastClosedClient,
-  isPipeline,
   isClosedWon,
   bucketizeByWeek,
   computeClientesAtivos,
   computeRenovacoesVencidas,
   computeEsforcoDiario,
 } from "@/lib/metrics";
+import { isAberto } from "@/lib/pipe";
 import type {
   RawDeal,
   RawCall,
@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
     const dailyCallsSerie = buildDailyCallSeries(calls, start, end);
 
     const dealsAtivos = deals
-      .filter(d => !isClosedWon(String(d.stage || '')) && isPipeline(String(d.stage || '')))
+      .filter(d => isAberto(String(d.stage || '')))
       .map(d => {
         const { empresa, empresa_source } = resolveEmpresa(d, leadsByNome);
         return {

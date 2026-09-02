@@ -1,28 +1,35 @@
 import type { RawDeal, RawCall, RawEmail, RawClassificacao, RawReuniao, ComputedMetrics, CoverageSourceStats, CoverageReport, DailyEffort, WeeklyBucket, ClientesAtivosSplit, ClientesAtivosMes, ClientesAtivosMetrics, RenovacaoVencida, RenovacoesVencidasMetrics, PipelineBucketType, PipelineBucket, PipelineBucketsMetrics, FaturamentoMes, FaturamentoMensalMetrics, MrrArrMetrics, ComissaoPorOwnerCanal, ComissaoMes, ComissaoOwnerCanalMetrics, ReceitaCanalItem, ReceitaPorCanalMetrics } from './types';
+import { ETAPAS_GANHAS, isGanho, isPerdido, isAberto } from './pipe';
 
 // --- Stage classification helpers ---
 
 // exportado pra que o comparador de paridade (src/lib/ingest/paridade.ts) e o SQL do
 // Neon usem EXATAMENTE a mesma definição de "ganho" que o dashboard usa.
-export const CLOSED_WON_STAGES = ['fechado ganho', 'contrato enviado'];
-const CLOSED_LOST_STAGES = [
-  'fechado perdido',
-  'fechado perdido para a concorrencia',
-  'fechado perdido para a concorrência',
-  'perdido',
+// feature-041 §3.3 — o vocabulário de estágio mora em `pipe.ts`. Aqui só reexportamos para
+// não quebrar quem já importa daqui.
+export const CLOSED_WON_STAGES = ETAPAS_GANHAS;
+
+/**
+ * Rótulo de BALDE do gráfico de pipeline — NÃO é a definição de "pipe".
+ *
+ * Era esta lista que a extinta `isPipeline` usava para dizer o que era o pipe, descartando 54
+ * negócios em silêncio. Como classificador de balde ela continua correta: a pergunta ali é
+ * "que nome dar a este estágio no gráfico", não "isto está aberto".
+ */
+const BUCKET_PIPELINE_STAGES = [
+  'proposta enviada',
+  'em negociacao',
+  'em negociação',
+  'negociacao/revisao',
+  'negociação/revisão',
 ];
-const PIPELINE_STAGES = ['proposta enviada', 'em negociacao', 'em negociação', 'negociacao/revisao', 'negociação/revisão'];
 
 export function isClosedWon(stage: string): boolean {
-  return CLOSED_WON_STAGES.includes(stage.toLowerCase().trim());
+  return isGanho(stage);
 }
 
 export function isClosedLost(stage: string): boolean {
-  return CLOSED_LOST_STAGES.includes(stage.toLowerCase().trim());
-}
-
-export function isPipeline(stage: string): boolean {
-  return PIPELINE_STAGES.includes(stage.toLowerCase().trim());
+  return isPerdido(stage);
 }
 
 export function isActive(stage: string): boolean {
@@ -198,7 +205,9 @@ export function computeMetrics(
   );
 
   // Pipeline deals (snapshot — current state)
-  const pipelineDeals = deals.filter(d => isPipeline(String(d.stage || '')));
+  // feature-041 §3.3 — definição única. Antes era allowlist e perdia Reunião Técnica,
+  // Proposta / Governo e as 39 Grandes Contas sem avisar ninguém.
+  const pipelineDeals = deals.filter(d => isAberto(String(d.stage || '')));
 
   // Financial metrics
   const valor_pipeline = pipelineDeals.reduce((sum, d) => sum + (Number(d.valor) || 0), 0);
@@ -663,7 +672,7 @@ export function classifyPipelineBucket(stage: string): PipelineBucketType {
 
   if (POC_STAGE_KEYWORDS.some(k => s.includes(k))) return 'POC';
   if (FOLLOW_UP_STAGE_KEYWORDS.some(k => s.includes(k))) return 'FOLLOW-UP';
-  if (PIPELINE_STAGES.includes(s)) return 'PIPELINE';
+  if (BUCKET_PIPELINE_STAGES.includes(s)) return 'PIPELINE';
   return 'OPORTUNIDADE';
 }
 

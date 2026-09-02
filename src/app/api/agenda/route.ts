@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { CACHE_TTL_MS } from "@/lib/cache-ttl";
 import { verifySession } from "@/lib/auth";
 import { fetchFromSheets } from "@/lib/sheets";
+import { hojeBRT } from "@/lib/brt";
+import { addDays } from "@/lib/farol";
 
 const memoryCache = new Map<string, { data: any; timestamp: number }>();
 
@@ -20,8 +22,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const rows = await fetchFromSheets("agenda");
-    const hoje = new Date().toISOString().split('T')[0];
-    const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+    const hoje = hojeBRT();
+    const in7Days = addDays(hoje, 7);
 
     if (!rows || rows.length === 0) {
       return NextResponse.json({

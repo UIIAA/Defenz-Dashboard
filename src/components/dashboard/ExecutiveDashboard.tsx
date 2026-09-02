@@ -420,11 +420,15 @@ export const ExecutiveDashboard = () => {
             icon={FileText}
             title="Propostas"
             value={data ? String(data.propostas) : "-"}
-            subtext={data ? `Pipeline: ${formatCurrency(data.valor_pipeline)}` : ""}
+            subtext={
+              data
+                ? `Pipe aberto · ${data.deals_pipeline} ${data.deals_pipeline === 1 ? 'negócio' : 'negócios'} · ${formatCurrency(data.valor_pipeline)}`
+                : ""
+            }
             highlight={true}
             healthStatus={coverage ? getHealth(coverage.deals) : undefined}
             tooltip={<CoverageTooltip
-              base="Deals com Stage 'Proposta Enviada' ou [PROPOSTA]. Pipeline = soma dos valores."
+              base="Deals com Stage 'Proposta Enviada' ou [PROPOSTA]. Pipe aberto = todos os negócios que NÃO estão fechados (nem ganho, nem perdido) e não estão em Contato Futuro."
               aba="deals" coluna="stage / resultados"
               stats={coverage?.deals}
             />}
